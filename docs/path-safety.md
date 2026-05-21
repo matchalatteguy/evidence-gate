@@ -20,7 +20,7 @@ nested/reports/quality.json
 Invalid examples:
 
 ```text
-/tmp/metrics.json
+ABSOLUTE_PATH/metrics.json
 ../other-run/metrics.json
 artifacts/../../outside.csv
 ```

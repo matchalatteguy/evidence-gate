@@ -105,7 +105,7 @@ The referenced report value must be a relative path string under the run root. R
 All report and output paths must be relative and contained by the run directory. These are rejected:
 
 ```yaml
-path: /tmp/report.json
+path: ABSOLUTE_PATH/report.json
 path: ../outside/report.json
 ```
 

@@ -83,6 +83,18 @@ def test_cli_init_example_copies_bundled_example(tmp_path: Path) -> None:
     assert (target / "runs" / "demo-run" / "artifacts" / "predictions.csv").is_file()
 
 
+def test_cli_init_example_refuses_existing_target(tmp_path: Path) -> None:
+    target = tmp_path / "copied-example"
+    target.mkdir()
+
+    try:
+        main(["init-example", str(target)])
+    except SystemExit as exc:
+        assert str(exc) == f"target already exists: {target}"
+    else:  # pragma: no cover - explicit failure branch for readability
+        raise AssertionError("init-example should refuse to overwrite an existing target")
+
+
 def test_bundled_example_validates_successfully() -> None:
     example = Path("examples/toy-ml-run")
 

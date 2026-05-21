@@ -1,19 +1,26 @@
 # Evidence Gate
 
-Evidence Gate is a small local-first Python library and CLI for checking whether a research,
-evaluation, benchmark, or data-processing run has enough machine-checkable evidence for review.
+Evidence Gate is a local-first Python library and CLI for deciding whether a run directory contains enough machine-checkable evidence for review. It is useful for research, evaluation, benchmark, document-processing, and data-build pipelines where results should not move forward until required reports and artifacts are present, well shaped, and easy for a reviewer to inspect.
 
-It answers practical questions before a human review:
+Use it when a pipeline writes files like this:
+
+```text
+runs/demo-run/
+  reports/metrics.json
+  artifacts/predictions.csv
+```
+
+…and you want one command to answer:
 
 - Did every required report get written?
 - Do reports have the expected status and required fields?
-- Are counts and metrics valid and within thresholds?
-- Do declared output artifacts stay inside the run directory?
-- Do lightweight CSV artifacts contain the expected columns?
-- Can the run produce a JSON status file and Markdown review packet?
+- Are counts and metrics finite and inside configured thresholds?
+- Do declared output artifacts exist?
+- Do artifact paths stay inside the run directory?
+- Do lightweight CSV artifacts contain expected columns?
+- Can the run produce a JSON status file and Markdown review packet for CI or human review?
 
-Evidence Gate is intentionally offline. It does not call hosted services, manage credentials, or run
-live integrations.
+Evidence Gate is intentionally offline. It validates local files only. It does not call hosted services, manage credentials, upload artifacts, or run live integrations.
 
 ## Install
 
@@ -28,11 +35,12 @@ Or install with pip from a source checkout:
 
 ```bash
 python -m pip install .
+evidence-gate --help
 ```
 
 ## Quickstart
 
-Validate the synthetic example run:
+Validate the synthetic toy ML example included in this repository:
 
 ```bash
 uv run evidence-gate validate \
@@ -45,23 +53,17 @@ uv run evidence-gate packet \
   --md-out reports/review-packet.md
 ```
 
-The first command exits with status `0` when required checks pass and `1` when required checks fail.
-The JSON output is suitable for CI logs or downstream tools. The Markdown packet is intended for a
-human reviewer.
+The `validate` command exits with status `0` when required checks pass and `1` when required checks fail. The JSON output is suitable for CI logs or downstream tools. The Markdown packet is intended for a reviewer, release checklist, or local decision note.
 
-## Python API
+To copy a fresh synthetic example into another directory:
 
-```python
-from pathlib import Path
-
-from evidence_gate import RunBundle, load_spec, validate_run, write_review_packet
-
-spec = load_spec(Path("examples/toy-ml-run/evidence-gate.yaml"))
-result = validate_run(RunBundle(Path("examples/toy-ml-run/runs/demo-run")), spec)
-write_review_packet(result, Path("reports"), markdown=True)
+```bash
+uv run evidence-gate init-example scratch/toy-run
 ```
 
-## Evidence spec shape
+## Evidence contract in one screen
+
+A contract is a YAML file that says which reports and artifacts must exist under a run directory:
 
 ```yaml
 reports:
@@ -75,6 +77,7 @@ reports:
       failures: {max: 0}
     metrics:
       accuracy: {min: 0.9}
+      loss: {max: 1.0}
     outputs:
       predictions:
         path_field: outputs.predictions
@@ -82,12 +85,46 @@ reports:
         columns: [id, label, score]
 ```
 
-See `docs/contract-schema.md` and `docs/review-packet.md` for details.
+The corresponding report can be any JSON object with the fields referenced by the contract:
 
-## Non-goals
+```json
+{
+  "status": "passed",
+  "summary": "Synthetic classifier evaluation completed.",
+  "counts": {"examples": 24, "failures": 0},
+  "metrics": {"accuracy": 0.96, "loss": 0.18},
+  "outputs": {"predictions": "artifacts/predictions.csv"}
+}
+```
 
-Evidence Gate is not an experiment tracker, hosted dashboard, data lake, scheduler, or networked
-service. It validates local files and emits review artifacts.
+All paths are relative to the run root. Absolute paths and `..` escapes fail validation.
+
+## Python API
+
+```python
+from pathlib import Path
+
+from evidence_gate import RunBundle, load_spec, validate_run, write_review_packet
+
+spec = load_spec(Path("examples/toy-ml-run/evidence-gate.yaml"))
+bundle = RunBundle(Path("examples/toy-ml-run/runs/demo-run"))
+result = validate_run(bundle, spec)
+
+if not result.passed:
+    for failure in result.failures:
+        print(f"{failure.code}: {failure.message}")
+
+write_review_packet(result, Path("reports"), markdown=True)
+```
+
+## Documentation map
+
+- `docs/contract-schema.md` - full contract reference and example JSON report.
+- `docs/cli-usage.md` - command reference, exit behavior, and CI pattern.
+- `docs/python-api.md` - API-oriented usage notes for agents and engineers.
+- `docs/review-packet.md` - generated JSON status and Markdown packet structure.
+- `docs/path-safety.md` - how relative path containment works.
+- `docs/non-goals.md` - boundaries and intentionally unsupported features.
 
 ## Development
 
@@ -96,6 +133,14 @@ uv sync --dev
 uv run pytest
 uv run ruff check .
 ```
+
+## Non-goals
+
+Evidence Gate is not an experiment tracker, hosted dashboard, data lake, scheduler, model registry, artifact store, or networked service. It does not authenticate to external systems, start jobs, mutate remote state, or replace human review. It only validates local evidence files and writes local review artifacts.
+
+## Project status
+
+This is a small MVP intended to be easy to inspect, extend, and use from local scripts or CI. The public API is intentionally compact: load a spec, create a run bundle, validate it, and write review artifacts.
 
 ## License
 

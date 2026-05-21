@@ -54,7 +54,7 @@ uv run evidence-gate packet \
 
 ## init-example
 
-Copy the bundled synthetic example into a new target directory:
+Copy the bundled synthetic example into a new target directory. This command uses package resources, so it works from a source checkout and from an installed wheel:
 
 ```bash
 uv run evidence-gate init-example scratch/toy-ml-run

@@ -55,7 +55,7 @@ uv run evidence-gate packet \
 
 The `validate` command exits with status `0` when required checks pass and `1` when required checks fail. The JSON output is suitable for CI logs or downstream tools. The Markdown packet is intended for a reviewer, release checklist, or local decision note.
 
-To copy a fresh synthetic example into another directory:
+To copy a fresh synthetic example into another directory (available from source checkouts and installed packages):
 
 ```bash
 uv run evidence-gate init-example scratch/toy-run

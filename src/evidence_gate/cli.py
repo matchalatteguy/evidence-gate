@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import sys
+from importlib import resources
+from importlib.abc import Traversable
 from pathlib import Path
 
 from evidence_gate.models import RunBundle, ValidationResult
@@ -64,11 +65,21 @@ def _packet(args: argparse.Namespace) -> int:
 
 
 def _init_example(args: argparse.Namespace) -> int:
-    source = Path(__file__).resolve().parents[2] / "examples" / "toy-ml-run"
+    source = resources.files("evidence_gate").joinpath("examples", "toy-ml-run")
     if args.target.exists():
         raise SystemExit(f"target already exists: {args.target}")
-    shutil.copytree(source, args.target)
+    _copy_tree(source, args.target)
     return 0
+
+
+def _copy_tree(source: Traversable, target: Path) -> None:
+    target.mkdir(parents=True)
+    for child in source.iterdir():
+        child_target = target / child.name
+        if child.is_dir():
+            _copy_tree(child, child_target)
+        else:
+            child_target.write_bytes(child.read_bytes())
 
 
 if __name__ == "__main__":

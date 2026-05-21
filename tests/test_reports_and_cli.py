@@ -70,3 +70,25 @@ def test_cli_packet_writes_markdown_from_status_json(
 
     assert code == 0
     assert "Decision: approved" in md_path.read_text(encoding="utf-8")
+
+
+def test_cli_init_example_copies_bundled_example(tmp_path: Path) -> None:
+    target = tmp_path / "copied-example"
+
+    code = main(["init-example", str(target)])
+
+    assert code == 0
+    assert (target / "evidence-gate.yaml").is_file()
+    assert (target / "runs" / "demo-run" / "reports" / "metrics.json").is_file()
+    assert (target / "runs" / "demo-run" / "artifacts" / "predictions.csv").is_file()
+
+
+def test_bundled_example_validates_successfully() -> None:
+    example = Path("examples/toy-ml-run")
+
+    result = validate_run(
+        RunBundle(example / "runs" / "demo-run"), load_spec(example / "evidence-gate.yaml")
+    )
+
+    assert result.passed is True
+    assert result.recommendation == "approved"

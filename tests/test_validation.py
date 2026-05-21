@@ -66,6 +66,19 @@ def test_metric_threshold_type_is_validated(demo_run: tuple[Path, Path]) -> None
     assert any(check.code == "metric.invalid" for check in result.failures)
 
 
+def test_count_threshold_requires_non_negative_integer(demo_run: tuple[Path, Path]) -> None:
+    spec_path, run_path = demo_run
+    report_path = run_path / "reports" / "metrics.json"
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    payload["counts"]["examples"] = -1.5
+    report_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_run(RunBundle(run_path), load_spec(spec_path))
+
+    assert result.passed is False
+    assert any(check.code == "count.invalid" for check in result.failures)
+
+
 def test_output_path_escaping_run_root_fails(demo_run: tuple[Path, Path]) -> None:
     spec_path, run_path = demo_run
     report_path = run_path / "reports" / "metrics.json"
@@ -87,3 +100,45 @@ def test_missing_csv_column_fails(demo_run: tuple[Path, Path]) -> None:
 
     assert result.passed is False
     assert any(check.code == "table.column_missing" for check in result.failures)
+
+
+def test_absolute_output_path_is_rejected(demo_run: tuple[Path, Path], tmp_path: Path) -> None:
+    spec_path, run_path = demo_run
+    report_path = run_path / "reports" / "metrics.json"
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    payload["outputs"]["predictions"] = str(tmp_path / "outside.csv")
+    report_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_run(RunBundle(run_path), load_spec(spec_path))
+
+    assert result.passed is False
+    assert any(check.code == "path.absolute" for check in result.failures)
+
+
+def test_missing_required_output_artifact_fails(demo_run: tuple[Path, Path]) -> None:
+    spec_path, run_path = demo_run
+    (run_path / "artifacts" / "predictions.csv").unlink()
+
+    result = validate_run(RunBundle(run_path), load_spec(spec_path))
+
+    assert result.passed is False
+    assert any(check.code == "artifact.missing" for check in result.failures)
+
+
+def test_optional_report_warns_without_failing(demo_run: tuple[Path, Path]) -> None:
+    spec_path, run_path = demo_run
+    spec_path.write_text(
+        spec_path.read_text(encoding="utf-8")
+        + """
+
+  - name: diagnostics
+    path: reports/diagnostics.json
+    required: false
+""",
+        encoding="utf-8",
+    )
+
+    result = validate_run(RunBundle(run_path), load_spec(spec_path))
+
+    assert result.passed is True
+    assert any(check.code == "report.optional_missing" for check in result.warnings)

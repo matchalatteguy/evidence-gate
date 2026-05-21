@@ -134,6 +134,16 @@ def _validate_thresholds(
     singular = group[:-1]
     for name, limits in specs.items():
         value = values.get(name)
+        if group == "counts" and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
+            checks.append(
+                _failure(
+                    f"{singular}.invalid",
+                    f"{name!r} must be a non-negative integer",
+                    report.name,
+                    display_path,
+                )
+            )
+            continue
         if (
             not isinstance(value, int | float)
             or isinstance(value, bool)

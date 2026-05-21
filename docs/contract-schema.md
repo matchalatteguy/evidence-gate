@@ -98,7 +98,7 @@ outputs:
     columns: [id, label, score]
 ```
 
-The referenced report value must be a relative path string under the run root. Required missing artifacts fail; optional missing artifacts warn. When `columns` is set, Evidence Gate reads only the CSV header and checks that every listed column is present.
+The referenced report value must be a relative path string under the run root. Required missing artifacts fail; optional missing artifacts warn. Each output spec must be a mapping with a `path_field`; malformed output specs raise a clear `ValueError` during spec loading. When `columns` is set, Evidence Gate reads only the CSV header and checks that every listed column is present. Missing columns fail with `table.column_missing`; unreadable or non-UTF-8 CSV files fail with `table.invalid_csv` instead of crashing validation.
 
 ## Path policy
 

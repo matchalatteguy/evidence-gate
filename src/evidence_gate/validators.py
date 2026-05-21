@@ -257,9 +257,12 @@ def _validate_output(
 def _validate_csv_columns(
     path: Path, expected_columns: list[str], report_name: str, display_path: str
 ) -> list[Check]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.reader(handle)
-        header = next(reader, [])
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.reader(handle)
+            header = next(reader, [])
+    except (OSError, UnicodeDecodeError, csv.Error) as exc:
+        return [_failure("table.invalid_csv", f"CSV could not be read: {exc}", report_name, display_path)]
     missing = [column for column in expected_columns if column not in header]
     if missing:
         return [

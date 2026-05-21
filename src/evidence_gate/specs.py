@@ -32,14 +32,20 @@ def _parse_report(payload: dict[str, Any]) -> ReportSpec:
     outputs_payload = payload.get("outputs", {}) or {}
     if not isinstance(outputs_payload, dict):
         raise ValueError("report outputs must be a mapping")
-    outputs = {
-        str(name): OutputSpec(
+    outputs: dict[str, OutputSpec] = {}
+    for name, config in outputs_payload.items():
+        if not isinstance(config, dict):
+            raise ValueError("output specs must be mappings")
+        if "path_field" not in config:
+            raise ValueError("output specs must include path_field")
+        columns = config.get("columns", [])
+        if not isinstance(columns, list):
+            raise ValueError("output columns must be a list")
+        outputs[str(name)] = OutputSpec(
             path_field=str(config["path_field"]),
             required=bool(config.get("required", True)),
-            columns=[str(column) for column in config.get("columns", [])],
+            columns=[str(column) for column in columns],
         )
-        for name, config in outputs_payload.items()
-    }
     return ReportSpec(
         name=str(payload["name"]),
         path=str(payload["path"]),

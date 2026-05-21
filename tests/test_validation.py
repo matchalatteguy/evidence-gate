@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from evidence_gate import RunBundle, load_spec, validate_run
 
 
@@ -102,6 +104,16 @@ def test_missing_csv_column_fails(demo_run: tuple[Path, Path]) -> None:
     assert any(check.code == "table.column_missing" for check in result.failures)
 
 
+def test_unreadable_csv_is_reported_as_validation_failure(demo_run: tuple[Path, Path]) -> None:
+    spec_path, run_path = demo_run
+    (run_path / "artifacts" / "predictions.csv").write_bytes(b"id,label,score\n\xff\xfe\x00")
+
+    result = validate_run(RunBundle(run_path), load_spec(spec_path))
+
+    assert result.passed is False
+    assert any(check.code == "table.invalid_csv" for check in result.failures)
+
+
 def test_absolute_output_path_is_rejected(demo_run: tuple[Path, Path], tmp_path: Path) -> None:
     spec_path, run_path = demo_run
     report_path = run_path / "reports" / "metrics.json"
@@ -142,3 +154,39 @@ def test_optional_report_warns_without_failing(demo_run: tuple[Path, Path]) -> N
 
     assert result.passed is True
     assert any(check.code == "report.optional_missing" for check in result.warnings)
+
+
+def test_optional_output_warns_without_failing(demo_run: tuple[Path, Path]) -> None:
+    spec_path, run_path = demo_run
+    report_path = run_path / "reports" / "metrics.json"
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    payload["outputs"].pop("predictions")
+    report_path.write_text(json.dumps(payload), encoding="utf-8")
+    spec_path.write_text(
+        spec_path.read_text(encoding="utf-8").replace(
+            "required: true\n        columns", "required: false\n        columns"
+        ),
+        encoding="utf-8",
+    )
+
+    result = validate_run(RunBundle(run_path), load_spec(spec_path))
+
+    assert result.passed is True
+    assert any(check.code == "artifact.missing" for check in result.warnings)
+
+
+def test_malformed_output_spec_raises_clear_value_error(demo_run: tuple[Path, Path]) -> None:
+    spec_path, _run_path = demo_run
+    spec_path.write_text(
+        """
+reports:
+  - name: metrics
+    path: reports/metrics.json
+    outputs:
+      predictions: outputs.predictions
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="output specs must be mappings"):
+        load_spec(spec_path)

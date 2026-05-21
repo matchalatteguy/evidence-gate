@@ -40,14 +40,14 @@ evidence-gate --help
 
 ## Quickstart
 
-Validate the synthetic toy ML example included in this repository:
+For a complete walkthrough, start with `docs/first-five-minutes.md`. The shortest path is:
 
 ```bash
+uv sync --dev
 uv run evidence-gate validate \
   --spec examples/toy-ml-run/evidence-gate.yaml \
   --run examples/toy-ml-run/runs/demo-run \
   --json-out reports/evidence-status.json
-
 uv run evidence-gate packet \
   --status reports/evidence-status.json \
   --md-out reports/review-packet.md
@@ -59,6 +59,14 @@ To copy a fresh synthetic example into another directory (available from source 
 
 ```bash
 uv run evidence-gate init-example scratch/toy-run
+```
+
+Then validate the copied run:
+
+```bash
+uv run evidence-gate validate \
+  --spec scratch/toy-run/evidence-gate.yaml \
+  --run scratch/toy-run/runs/demo-run
 ```
 
 ## Evidence contract in one screen
@@ -119,12 +127,15 @@ write_review_packet(result, Path("reports"), markdown=True)
 
 ## Documentation map
 
+- `docs/first-five-minutes.md` - fastest setup, validation, packet generation, and troubleshooting path.
 - `docs/contract-schema.md` - full contract reference and example JSON report.
 - `docs/cli-usage.md` - command reference, exit behavior, and CI pattern.
 - `docs/python-api.md` - API-oriented usage notes for agents and engineers.
+- `docs/llm-agent-guide.md` - safe agent workflow and failure-code remediation map.
 - `docs/review-packet.md` - generated JSON status and Markdown packet structure.
 - `docs/path-safety.md` - how relative path containment works.
 - `docs/non-goals.md` - boundaries and intentionally unsupported features.
+- `examples/toy-ml-run/README.md` - synthetic example layout and adaptation notes.
 
 ## Development
 

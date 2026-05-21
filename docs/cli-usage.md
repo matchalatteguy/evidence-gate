@@ -80,3 +80,25 @@ evidence-gate packet \
 ```
 
 Keep generated status and packet files wherever your project stores review artifacts. The paths inside them remain relative to the run root.
+
+## CI pattern
+
+A minimal CI job should install dependencies, run validation, and always upload or print the status JSON when validation fails. Example shell shape:
+
+```bash
+set -euo pipefail
+mkdir -p reports
+if ! evidence-gate validate \
+  --spec evidence-gate.yaml \
+  --run runs/candidate-run \
+  --json-out reports/evidence-status.json; then
+  python -m json.tool reports/evidence-status.json
+  exit 1
+fi
+
+evidence-gate packet \
+  --status reports/evidence-status.json \
+  --md-out reports/review-packet.md
+```
+
+Commit the contract and small synthetic fixtures. Treat generated status files and review packets as build artifacts unless your project intentionally records review decisions in git.

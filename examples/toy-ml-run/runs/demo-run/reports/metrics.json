@@ -1,0 +1,7 @@
+{
+  "status": "passed",
+  "summary": "Synthetic model evaluation completed.",
+  "counts": {"examples": 24, "failures": 0},
+  "metrics": {"accuracy": 0.92, "loss": 0.18},
+  "outputs": {"predictions": "artifacts/predictions.csv"}
+}

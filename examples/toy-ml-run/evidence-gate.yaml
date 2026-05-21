@@ -1,0 +1,17 @@
+reports:
+  - name: metrics
+    path: reports/metrics.json
+    required: true
+    expected_status: passed
+    required_fields: [summary]
+    counts:
+      examples: {min: 1}
+      failures: {max: 0}
+    metrics:
+      accuracy: {min: 0.9}
+      loss: {max: 1.0}
+    outputs:
+      predictions:
+        path_field: outputs.predictions
+        required: true
+        columns: [id, label, score]

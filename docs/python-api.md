@@ -4,18 +4,19 @@ Evidence Gate exposes a small API for scripts, notebooks, and LLM agents that ne
 
 ## Main objects
 
-- `EvidenceSpec`: normalized contract containing report specifications.
+- `EvidenceSpec`: normalized contract containing report specifications and `schema_version`.
 - `ReportSpec`: expected JSON report, required fields, thresholds, and output artifacts.
 - `RunBundle`: safe wrapper around a run root directory.
 - `ValidationResult`: pass/fail result, recommendation, counts, checks, warnings, and failures.
 - `Check`: one machine-readable check with a stable code and severity.
+- `SpecValidationError`: raised by `load_spec` when a contract has an invalid shape.
 
 ## Basic usage
 
 ```python
 from pathlib import Path
 
-from evidence_gate import RunBundle, load_spec, validate_run, write_review_packet
+from evidence_gate import RunBundle, load_spec, render_review_packet, validate_run
 
 spec = load_spec(Path("evidence-gate.yaml"))
 bundle = RunBundle(Path("runs/demo-run"))
@@ -28,7 +29,7 @@ print(result.counts)
 for check in result.failures:
     print(check.code, check.message, check.path)
 
-write_review_packet(result, Path("reports"), markdown=True)
+print(render_review_packet(result))
 ```
 
 ## Handling failures
@@ -50,6 +51,7 @@ Common failure codes include:
 - `field.missing`
 - `count.invalid`, `count.below_min`, `count.above_max`
 - `metric.invalid`, `metric.below_min`, `metric.above_max`
+- `numeric.invalid`, `numeric.below_min`, `numeric.above_max`
 - `artifact.missing`
 - `path.absolute`, `path.escape`
 - `table.column_missing`
@@ -65,9 +67,26 @@ path = bundle.resolve_relative("reports/metrics.json")
 
 Absolute paths and paths that escape the run root raise `ValueError`. The validator converts those path errors into failure checks.
 
+## Handling contract loading errors
+
+`load_spec` raises `SpecValidationError` for malformed YAML/JSON contracts with messages that include the contract location when available:
+
+```python
+from pathlib import Path
+
+from evidence_gate import SpecValidationError, load_spec
+
+try:
+    spec = load_spec(Path("evidence-gate.yaml"))
+except SpecValidationError as exc:
+    print(f"Fix the evidence contract: {exc}")
+```
+
+The CLI reports these as concise `spec error: ...` messages and exits with code `2` instead of printing a traceback.
+
 ## Writing artifacts
 
-`write_review_packet(result, output_dir, markdown=True)` writes review artifacts under `output_dir`. The CLI uses this function to produce Markdown packets from status JSON.
+`render_review_packet(result)` returns Markdown without writing to disk. `write_review_packet_file(result, path)` writes to an explicit file path, matching the CLI `packet --md-out` behavior. `write_review_packet(result, output_dir, markdown=True)` remains available for callers that prefer the older directory-based helper.
 
 For machine-readable output, use `ValidationResult.to_dict()` and serialize it with your preferred JSON writer.
 

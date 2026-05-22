@@ -1,3 +1,4 @@
+schema_version: 1
 reports:
   - name: metrics
     path: reports/metrics.json
@@ -14,4 +15,4 @@ reports:
       predictions:
         path_field: outputs.predictions
         required: true
-        columns: [id, label, score]
+        csv_columns: [id, label, score]

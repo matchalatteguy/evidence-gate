@@ -55,6 +55,17 @@ uv run evidence-gate packet \
 
 The `validate` command exits with status `0` when required checks pass and `1` when required checks fail. The JSON output is suitable for CI logs or downstream tools. The Markdown packet is intended for a reviewer, release checklist, or local decision note.
 
+## Should you use Evidence Gate?
+
+Use Evidence Gate when you need a small, local, inspectable gate for file-producing pipelines:
+
+- benchmark or evaluation runs that emit JSON metrics and CSV summaries;
+- data-build jobs that must prove row counts, failure counts, and output artifacts;
+- document/OCR pipelines that need a reviewer packet before results move forward;
+- agent workflows where stable failure codes are easier to remediate than prose logs.
+
+Do not use it as an experiment tracker, dashboard, scheduler, artifact store, or general schema-validation framework. The current schema is intentionally narrow: JSON report objects, relative local artifacts, finite numeric thresholds, and CSV header checks. If you need hosted state, authentication, remote mutation, large dataset validation, or custom plugin execution, keep Evidence Gate as a lightweight final readiness check rather than the system of record.
+
 To copy a fresh synthetic example into another directory (available from source checkouts and installed packages):
 
 ```bash
@@ -74,6 +85,7 @@ uv run evidence-gate validate \
 A contract is a YAML file that says which reports and artifacts must exist under a run directory:
 
 ```yaml
+schema_version: 1
 reports:
   - name: metrics
     path: reports/metrics.json
@@ -86,11 +98,13 @@ reports:
     metrics:
       accuracy: {min: 0.9}
       loss: {max: 1.0}
+    numeric:
+      diagnostics.sample_count: {min: 1}
     outputs:
       predictions:
         path_field: outputs.predictions
         required: true
-        columns: [id, label, score]
+        csv_columns: [id, label, score]
 ```
 
 The corresponding report can be any JSON object with the fields referenced by the contract:
@@ -112,7 +126,7 @@ All paths are relative to the run root. Absolute paths and `..` escapes fail val
 ```python
 from pathlib import Path
 
-from evidence_gate import RunBundle, load_spec, validate_run, write_review_packet
+from evidence_gate import RunBundle, load_spec, render_review_packet, validate_run
 
 spec = load_spec(Path("examples/toy-ml-run/evidence-gate.yaml"))
 bundle = RunBundle(Path("examples/toy-ml-run/runs/demo-run"))
@@ -122,7 +136,7 @@ if not result.passed:
     for failure in result.failures:
         print(f"{failure.code}: {failure.message}")
 
-write_review_packet(result, Path("reports"), markdown=True)
+print(render_review_packet(result))
 ```
 
 ## Documentation map

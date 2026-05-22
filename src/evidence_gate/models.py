@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 Severity = Literal["pass", "warning", "failure"]
+SUPPORTED_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -39,7 +40,13 @@ class Check:
 class OutputSpec:
     path_field: str
     required: bool = True
-    columns: list[str] = field(default_factory=list)
+    csv_columns: list[str] = field(default_factory=list)
+
+    @property
+    def columns(self) -> list[str]:
+        """Backward-compatible alias for CSV header validation columns."""
+
+        return self.csv_columns
 
 
 @dataclass(frozen=True)
@@ -51,12 +58,14 @@ class ReportSpec:
     required_fields: list[str] = field(default_factory=list)
     counts: dict[str, dict[str, float]] = field(default_factory=dict)
     metrics: dict[str, dict[str, float]] = field(default_factory=dict)
+    numeric: dict[str, dict[str, float]] = field(default_factory=dict)
     outputs: dict[str, OutputSpec] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class EvidenceSpec:
     reports: list[ReportSpec]
+    schema_version: int = SUPPORTED_SCHEMA_VERSION
 
 
 @dataclass(frozen=True)
@@ -78,10 +87,11 @@ class RunBundle:
         return resolved
 
     def display_path(self, path: Path) -> str:
+        resolved = path.resolve()
         try:
-            return path.resolve().relative_to(self.root).as_posix()
+            return resolved.relative_to(self.root).as_posix()
         except ValueError:
-            return path.name
+            return "<outside-run-root>"
 
 
 @dataclass(frozen=True)
@@ -91,6 +101,7 @@ class ValidationResult:
     checks: list[Check]
     counts: dict[str, int]
     run_root: str
+    schema_version: int = SUPPORTED_SCHEMA_VERSION
 
     @property
     def failures(self) -> list[Check]:
@@ -102,6 +113,7 @@ class ValidationResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "schema_version": self.schema_version,
             "passed": self.passed,
             "recommendation": self.recommendation,
             "counts": self.counts,
@@ -111,10 +123,19 @@ class ValidationResult:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> ValidationResult:
+        if not isinstance(payload, dict):
+            raise ValueError("status JSON must be an object")
+        checks = payload["checks"]
+        counts = payload["counts"]
+        if not isinstance(checks, list):
+            raise ValueError("status JSON field 'checks' must be a list")
+        if not isinstance(counts, dict):
+            raise ValueError("status JSON field 'counts' must be an object")
         return cls(
+            schema_version=int(payload.get("schema_version", SUPPORTED_SCHEMA_VERSION)),
             passed=bool(payload["passed"]),
             recommendation=payload["recommendation"],
-            counts={str(key): int(value) for key, value in payload["counts"].items()},
+            counts={str(key): int(value) for key, value in counts.items()},
             run_root=str(payload.get("run_root", "")),
-            checks=[Check.from_dict(check) for check in payload["checks"]],
+            checks=[Check.from_dict(check) for check in checks],
         )

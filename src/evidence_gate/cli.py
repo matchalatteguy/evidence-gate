@@ -8,22 +8,41 @@ from importlib.abc import Traversable
 from pathlib import Path
 
 from evidence_gate.models import RunBundle, ValidationResult
-from evidence_gate.reports import write_review_packet, write_status_json
-from evidence_gate.specs import load_spec
+from evidence_gate.reports import write_review_packet_file, write_status_json
+from evidence_gate.specs import SpecValidationError, load_spec
 from evidence_gate.validators import validate_run
+
+SPEC_ERROR_EXIT_CODE = 2
+
+
+class CliInputError(ValueError):
+    """Raised for expected CLI input problems that should not print tracebacks."""
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    if args.command == "validate":
-        return _validate(args)
-    if args.command == "packet":
-        return _packet(args)
-    if args.command == "init-example":
-        return _init_example(args)
+    try:
+        if args.command == "validate":
+            return _validate(args)
+        if args.command == "packet":
+            return _packet(args)
+        if args.command == "init-example":
+            return _init_example(args)
+    except SpecValidationError as exc:
+        sys.stderr.write(f"spec error: {exc}\n")
+        return SPEC_ERROR_EXIT_CODE
+    except json.JSONDecodeError as exc:
+        sys.stderr.write(f"input error: invalid JSON: {exc.msg}\n")
+        return SPEC_ERROR_EXIT_CODE
+    except (CliInputError, KeyError, TypeError, ValueError) as exc:
+        sys.stderr.write(f"input error: {exc}\n")
+        return SPEC_ERROR_EXIT_CODE
+    except OSError as exc:
+        sys.stderr.write(f"file error: {exc}\n")
+        return SPEC_ERROR_EXIT_CODE
     parser.print_help()
-    return 2
+    return SPEC_ERROR_EXIT_CODE
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -56,18 +75,14 @@ def _validate(args: argparse.Namespace) -> int:
 def _packet(args: argparse.Namespace) -> int:
     payload = json.loads(args.status.read_text(encoding="utf-8"))
     result = ValidationResult.from_dict(payload)
-    args.md_out.parent.mkdir(parents=True, exist_ok=True)
-    tmp_dir = args.md_out.parent
-    generated = write_review_packet(result, tmp_dir, markdown=True)
-    if generated != args.md_out:
-        args.md_out.write_text(generated.read_text(encoding="utf-8"), encoding="utf-8")
+    write_review_packet_file(result, args.md_out, markdown=True)
     return 0
 
 
 def _init_example(args: argparse.Namespace) -> int:
     source = resources.files("evidence_gate").joinpath("examples", "toy-ml-run")
     if args.target.exists():
-        raise SystemExit(f"target already exists: {args.target}")
+        raise CliInputError(f"target already exists: {args.target}")
     _copy_tree(source, args.target)
     return 0
 

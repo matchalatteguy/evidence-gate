@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: uv sync --dev
+      - name: Run tests
+        run: uv run pytest
+      - name: Run lint
+        run: uv run ruff check .
+      - name: Build package
+        run: uv build
+      - name: Smoke-test bundled example
+        run: |
+          uv run evidence-gate validate \
+            --spec examples/toy-ml-run/evidence-gate.yaml \
+            --run examples/toy-ml-run/runs/demo-run \
+            --json-out /tmp/evidence-status.json
+          uv run evidence-gate packet \
+            --status /tmp/evidence-status.json \
+            --md-out /tmp/review-packet.md

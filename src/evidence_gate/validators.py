@@ -24,6 +24,7 @@ def validate_run(bundle: RunBundle, spec: EvidenceSpec) -> ValidationResult:
     warned = sum(1 for check in checks if check.severity == "warning")
     passed = sum(1 for check in checks if check.severity == "pass")
     return ValidationResult(
+        schema_version=spec.schema_version,
         passed=failed == 0,
         recommendation="approved" if failed == 0 else "needs_work",
         checks=checks,
@@ -59,6 +60,7 @@ def _validate_report(bundle: RunBundle, report: ReportSpec) -> list[Check]:
     checks.extend(_validate_required_fields(payload, report, display_path))
     checks.extend(_validate_thresholds(payload, report, "counts", display_path))
     checks.extend(_validate_thresholds(payload, report, "metrics", display_path))
+    checks.extend(_validate_numeric_paths(payload, report, display_path))
     checks.extend(_validate_outputs(bundle, payload, report, display_path))
     if not any(check.severity == "failure" for check in checks):
         checks.append(
@@ -133,62 +135,91 @@ def _validate_thresholds(
         ]
     singular = group[:-1]
     for name, limits in specs.items():
-        value = values.get(name)
-        if group == "counts" and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
-            checks.append(
-                _failure(
-                    f"{singular}.invalid",
-                    f"{name!r} must be a non-negative integer",
-                    report.name,
-                    display_path,
-                )
+        checks.extend(
+            _validate_numeric_value(
+                values.get(name),
+                limits,
+                singular,
+                name,
+                report.name,
+                display_path,
+                integer=(group == "counts"),
             )
-            continue
-        if (
-            not isinstance(value, int | float)
-            or isinstance(value, bool)
-            or not math.isfinite(value)
-        ):
-            checks.append(
-                _failure(
-                    f"{singular}.invalid",
-                    f"{name!r} must be finite numeric",
-                    report.name,
-                    display_path,
-                )
-            )
-            continue
-        minimum = limits.get("min")
-        maximum = limits.get("max")
-        if minimum is not None and value < minimum:
-            checks.append(
-                _failure(
-                    f"{singular}.below_min",
-                    f"{name!r} is below {minimum}",
-                    report.name,
-                    display_path,
-                )
-            )
-        elif maximum is not None and value > maximum:
-            checks.append(
-                _failure(
-                    f"{singular}.above_max",
-                    f"{name!r} is above {maximum}",
-                    report.name,
-                    display_path,
-                )
-            )
-        else:
-            checks.append(
-                Check(
-                    f"{singular}.valid",
-                    f"{name!r} satisfied thresholds",
-                    "pass",
-                    report.name,
-                    display_path,
-                )
-            )
+        )
     return checks
+
+
+def _validate_numeric_paths(
+    payload: dict[str, Any], report: ReportSpec, display_path: str
+) -> list[Check]:
+    checks: list[Check] = []
+    for dotted_path, limits in report.numeric.items():
+        value = _get_path(payload, dotted_path)
+        checks.extend(
+            _validate_numeric_value(
+                value, limits, "numeric", dotted_path, report.name, display_path
+            )
+        )
+    return checks
+
+
+def _validate_numeric_value(
+    value: Any,
+    limits: dict[str, float],
+    code_prefix: str,
+    name: str,
+    report_name: str,
+    display_path: str,
+    *,
+    integer: bool = False,
+) -> list[Check]:
+    if integer and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
+        return [
+            _failure(
+                f"{code_prefix}.invalid",
+                f"{name!r} must be a non-negative integer",
+                report_name,
+                display_path,
+            )
+        ]
+    if not isinstance(value, int | float) or isinstance(value, bool) or not math.isfinite(value):
+        return [
+            _failure(
+                f"{code_prefix}.invalid",
+                f"{name!r} must be finite numeric",
+                report_name,
+                display_path,
+            )
+        ]
+    minimum = limits.get("min")
+    maximum = limits.get("max")
+    if minimum is not None and value < minimum:
+        return [
+            _failure(
+                f"{code_prefix}.below_min",
+                f"{name!r} is below {minimum}",
+                report_name,
+                display_path,
+            )
+        ]
+    if maximum is not None and value > maximum:
+        return [
+            _failure(
+                f"{code_prefix}.above_max",
+                f"{name!r} is above {maximum}",
+                report_name,
+                display_path,
+            )
+        ]
+    return [
+        Check(
+            f"{code_prefix}.valid",
+            f"{name!r} satisfied thresholds",
+            "pass",
+            report_name,
+            display_path,
+        )
+    ]
 
 
 def _validate_outputs(
@@ -247,9 +278,11 @@ def _validate_output(
             bundle.display_path(path),
         )
     ]
-    if output_spec.columns:
+    if output_spec.csv_columns:
         checks.extend(
-            _validate_csv_columns(path, output_spec.columns, report.name, bundle.display_path(path))
+            _validate_csv_columns(
+                path, output_spec.csv_columns, report.name, bundle.display_path(path)
+            )
         )
     return checks
 
@@ -262,7 +295,11 @@ def _validate_csv_columns(
             reader = csv.reader(handle)
             header = next(reader, [])
     except (OSError, UnicodeDecodeError, csv.Error) as exc:
-        return [_failure("table.invalid_csv", f"CSV could not be read: {exc}", report_name, display_path)]
+        return [
+            _failure(
+                "table.invalid_csv", f"CSV could not be read: {exc}", report_name, display_path
+            )
+        ]
     missing = [column for column in expected_columns if column not in header]
     if missing:
         return [

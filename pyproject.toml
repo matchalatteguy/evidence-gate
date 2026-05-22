@@ -18,11 +18,6 @@ classifiers = [
 ]
 dependencies = ["PyYAML>=6.0"]
 
-[project.urls]
-Homepage = "https://example.invalid/evidence-gate"
-Documentation = "https://example.invalid/evidence-gate/docs"
-Issues = "https://example.invalid/evidence-gate/issues"
-
 [project.scripts]
 evidence-gate = "evidence_gate.cli:main"
 

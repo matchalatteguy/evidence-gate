@@ -29,7 +29,7 @@ Exit behavior:
 
 - `0`: all required checks passed.
 - `1`: one or more required checks failed.
-- `2`: command-line usage error from `argparse`.
+- `2`: command-line usage error, unreadable input file, malformed spec, or malformed status JSON. Spec problems are printed to stderr as `spec error: ...` without a Python traceback.
 
 This makes `validate` suitable for CI:
 
@@ -83,7 +83,7 @@ Keep generated status and packet files wherever your project stores review artif
 
 ## CI pattern
 
-A minimal CI job should install dependencies, run validation, and always upload or print the status JSON when validation fails. Example shell shape:
+This repository includes `.github/workflows/ci.yml` as a complete GitHub Actions example for pytest, ruff, package build, and an Evidence Gate CLI smoke test. For project-specific pipelines, a minimal CI job should install dependencies, run validation, and always upload or print the status JSON when validation fails. Example shell shape:
 
 ```bash
 set -euo pipefail

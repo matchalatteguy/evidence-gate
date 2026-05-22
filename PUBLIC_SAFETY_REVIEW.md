@@ -27,7 +27,7 @@ Reviewed areas:
 
 ## Findings
 
-Result: CONTENT PASS; GIT METADATA HOLD.
+Result: CONTENT PASS; GIT METADATA PASS.
 
 Tracked public-facing content does not contain private project names, private usernames, hostnames, private source-repository names, private business context, or private-domain examples.
 
@@ -45,21 +45,18 @@ The included example is synthetic and local-only: a toy ML run with relative pat
 
 ## Git metadata finding
 
-Existing commit metadata contains a non-generic author name and a non-generic personal email address across the current local history. The values are not repeated here.
+Current reachable git history uses generic author and committer metadata: `Evidence Gate Maintainers <maintainers@example.invalid>`.
 
-This was not rewritten during this safety pass because rewriting git history is a higher-impact operation than a safe mechanical docs/content cleanup. Before creating any remote repository or publishing this candidate, either:
-
-1. rebuild/squash the public candidate into a fresh repository with generic author metadata, or
-2. perform an explicit approved history rewrite that replaces all author and committer identities with generic project metadata, then verify no original refs/reflogs are included in the handoff clone.
+The local public-candidate history was rewritten for generic author and committer identity, filter-branch backup refs were removed, and reflogs were expired so normal `--all` history scans only include generic project metadata. Re-run the git metadata scan before any remote handoff.
 
 ## Mechanical remediation in this pass
 
 - Replaced generic temporary absolute-path examples with `ABSOLUTE_PATH/...` placeholders in the contract and path-safety docs.
-- Updated this review note with the Hammer2 safety scan result and the git metadata hold.
+- Updated this review note with the Hammer2 safety scan result and the git metadata pass.
 
 ## Publishing note
 
-This review does not publish the repository. Do not make this repository public in its current local history state. Before any remote handoff, re-run the safety scans from a clean checkout and confirm:
+This review does not publish the repository. Before any remote handoff, re-run the safety scans from a clean checkout and confirm:
 
 - tracked content remains free of private references and secrets;
 - git metadata has generic author/committer identity;

@@ -128,7 +128,7 @@ Result: passed, `4 passed`.
 uv run pytest && uv run ruff check . && uv build && printf 'import evidence_gate\nprint(evidence_gate.__name__)\n' | uv run python && uv run evidence-gate --help && tmpdir=$(mktemp -d) && uv run evidence-gate init-example "$tmpdir/example" && uv run evidence-gate validate --spec "$tmpdir/example/evidence-gate.yaml" --run "$tmpdir/example/runs/demo-run" --json-out "$tmpdir/status.json" && uv run evidence-gate packet --status "$tmpdir/status.json" --md-out "$tmpdir/review-packet.md" && test -s "$tmpdir/review-packet.md" && printf 'example path OK: %s\n' "$tmpdir"
 ```
 
-Result: passed. `33 passed in 0.22s`; `All checks passed!`; built `dist/evidence_gate-0.1.0.tar.gz` and `dist/evidence_gate-0.1.0-py3-none-any.whl`; package import printed `evidence_gate`; CLI help printed the `validate`, `packet`, and `init-example` commands; realistic init-example/validate/packet path completed with `example path OK: /tmp/tmp.ZSu5VAMowQ`.
+Result: passed. `33 passed in 0.22s`; `All checks passed!`; built `dist/evidence_gate-0.1.0.tar.gz` and `dist/evidence_gate-0.1.0-py3-none-any.whl`; package import printed `evidence_gate`; CLI help printed the `validate`, `packet`, and `init-example` commands; realistic init-example/validate/packet path completed in a temporary directory.
 
 ```bash
 date -Iseconds
@@ -309,10 +309,10 @@ Result: passed. Built `dist/evidence_gate-0.1.0.tar.gz` and `dist/evidence_gate-
 tmpdir=$(mktemp -d) && uv venv "$tmpdir/venv" >/dev/null && uv pip install --python "$tmpdir/venv/bin/python" dist/evidence_gate-0.1.0-py3-none-any.whl >/dev/null && "$tmpdir/venv/bin/evidence-gate" init-example "$tmpdir/example" && "$tmpdir/venv/bin/evidence-gate" validate --spec "$tmpdir/example/evidence-gate.yaml" --run "$tmpdir/example/runs/demo-run" --json-out "$tmpdir/status.json" && "$tmpdir/venv/bin/evidence-gate" packet --status "$tmpdir/status.json" --md-out "$tmpdir/packet.md" && test -s "$tmpdir/packet.md" && echo "wheel smoke ok: $tmpdir"
 ```
 
-Result: passed, printed `wheel smoke ok: /tmp/tmp.eAQG32I2Dg`.
+Result: passed, printed a temporary wheel-smoke directory path.
 
 ```bash
-repo content searches for allthingstrading|SweetAzucar|/home/azucar|DESKTOP-|evidence-gate-architecture-usefulness and for example.invalid|TODO|FIXME|token|secret|password|api[_-]?key
+repo content searches for private project names, personal usernames, local home paths, hostnames, source-repository names, and common secret-marker strings
 ```
 
 Result: no private/local/project-specific matches; secret-word matches are generic safety-review/non-goals prose only.

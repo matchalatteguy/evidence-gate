@@ -31,7 +31,7 @@ jobs:
           uv run evidence-gate validate \
             --spec examples/toy-ml-run/evidence-gate.yaml \
             --run examples/toy-ml-run/runs/demo-run \
-            --json-out /tmp/evidence-status.json
+            --json-out evidence-status.json
           uv run evidence-gate packet \
-            --status /tmp/evidence-status.json \
-            --md-out /tmp/review-packet.md
+            --status evidence-status.json \
+            --md-out review-packet.md

@@ -4,9 +4,10 @@ import argparse
 import json
 import sys
 from importlib import resources
-from importlib.abc import Traversable
+from importlib.resources.abc import Traversable
 from pathlib import Path
 
+from evidence_gate.json_data import parse_json
 from evidence_gate.models import RunBundle, ValidationResult
 from evidence_gate.reports import write_review_packet_file, write_status_json
 from evidence_gate.specs import SpecValidationError, load_spec
@@ -73,7 +74,7 @@ def _validate(args: argparse.Namespace) -> int:
 
 
 def _packet(args: argparse.Namespace) -> int:
-    payload = json.loads(args.status.read_text(encoding="utf-8"))
+    payload = parse_json(args.status.read_text(encoding="utf-8"))
     result = ValidationResult.from_dict(payload)
     write_review_packet_file(result, args.md_out, markdown=True)
     return 0

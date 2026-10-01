@@ -1,11 +1,11 @@
 [project]
 name = "evidence-gate"
-version = "0.1.0"
+version = "0.2.0"
 description = "Validate local run artifacts against review-ready evidence contracts."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Evidence Gate contributors" }]
+authors = [{ name = "matchalatteguy" }]
 keywords = ["validation", "research", "evaluation", "artifacts", "cli"]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -17,6 +17,10 @@ classifiers = [
   "Topic :: Software Development :: Quality Assurance",
 ]
 dependencies = ["PyYAML>=6.0"]
+
+[project.urls]
+Repository = "https://github.com/matchalatteguy/evidence-gate"
+Issues = "https://github.com/matchalatteguy/evidence-gate/issues"
 
 [project.scripts]
 evidence-gate = "evidence_gate.cli:main"

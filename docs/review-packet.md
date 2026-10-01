@@ -23,7 +23,7 @@ uv run evidence-gate packet \
 {
   "passed": true,
   "recommendation": "approved",
-  "counts": {"passed": 8, "warnings": 0, "failed": 0, "total": 8},
+  "counts": {"passed": 1, "warnings": 0, "failed": 0, "total": 1},
   "run_root": "demo-run",
   "checks": [
     {
@@ -38,6 +38,8 @@ uv run evidence-gate packet \
 ```
 
 Important fields:
+
+`packet` validates the status schema, boolean decision, check severities, and consistency of the decision and counts with the checks. Malformed or inconsistent status input returns exit `2` instead of rendering a misleading approval. This consistency check does not authenticate the status file or rerun validation.
 
 - `passed`: true only when there are no failure-severity checks.
 - `recommendation`: `approved` when passed, otherwise `needs_work`.

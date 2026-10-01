@@ -7,11 +7,26 @@ from typing import Any
 
 import yaml
 
+from evidence_gate.json_data import parse_json
 from evidence_gate.models import SUPPORTED_SCHEMA_VERSION, EvidenceSpec, OutputSpec, ReportSpec
 
 
 class SpecValidationError(ValueError):
     """Raised when an evidence contract is syntactically valid but malformed."""
+
+
+class _StrictSafeLoader(yaml.SafeLoader):
+    def construct_mapping(self, node, deep=False):
+        mapping = super().construct_mapping(node, deep=deep)
+        seen = set()
+        for key_node, _value_node in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen:
+                raise yaml.constructor.ConstructorError(
+                    None, None, f"duplicate YAML field: {key}", key_node.start_mark
+                )
+            seen.add(key)
+        return mapping
 
 
 def load_spec(path: Path) -> EvidenceSpec:
@@ -23,22 +38,33 @@ def load_spec(path: Path) -> EvidenceSpec:
     """
 
     payload = _load_mapping(path)
+    _reject_unknown(payload, {"schema_version", "reports"}, "spec")
     schema_version = _schema_version(payload)
     reports_payload = payload.get("reports")
     if not isinstance(reports_payload, list):
         raise SpecValidationError("reports must be a list")
+    if not reports_payload:
+        raise SpecValidationError("reports must contain at least one report")
     reports = [
         _parse_report(report, f"reports[{index}]") for index, report in enumerate(reports_payload)
     ]
+    if len({report.name for report in reports}) != len(reports):
+        raise SpecValidationError("report names must be unique")
     return EvidenceSpec(reports=reports, schema_version=schema_version)
 
 
 def _load_mapping(path: Path) -> dict[str, Any]:
     try:
         text = path.read_text(encoding="utf-8")
-        payload = json.loads(text) if path.suffix.lower() == ".json" else yaml.safe_load(text)
+        payload = (
+            parse_json(text)
+            if path.suffix.lower() == ".json"
+            else yaml.load(text, Loader=_StrictSafeLoader)
+        )
     except json.JSONDecodeError as exc:
         raise SpecValidationError(f"invalid JSON spec: {exc.msg}") from exc
+    except ValueError as exc:
+        raise SpecValidationError(f"invalid JSON spec: {exc}") from exc
     except yaml.YAMLError as exc:
         raise SpecValidationError(f"invalid YAML spec: {exc}") from exc
     if not isinstance(payload, dict):
@@ -60,11 +86,28 @@ def _schema_version(payload: dict[str, Any]) -> int:
 def _parse_report(payload: Any, location: str) -> ReportSpec:
     if not isinstance(payload, dict):
         raise SpecValidationError(f"{location} must be a mapping")
-    outputs_payload = payload.get("outputs", {}) or {}
+    _reject_unknown(
+        payload,
+        {
+            "name",
+            "path",
+            "required",
+            "expected_status",
+            "required_fields",
+            "counts",
+            "metrics",
+            "numeric",
+            "outputs",
+        },
+        location,
+    )
+    outputs_payload = payload.get("outputs", {})
     if not isinstance(outputs_payload, dict):
         raise SpecValidationError(f"{location}.outputs must be a mapping")
     outputs: dict[str, OutputSpec] = {}
     for name, config in outputs_payload.items():
+        if not isinstance(name, str) or not name.strip():
+            raise SpecValidationError(f"{location}.outputs keys must be non-empty strings")
         output_location = f"{location}.outputs.{name}"
         outputs[str(name)] = _parse_output(config, output_location)
     return ReportSpec(
@@ -75,9 +118,9 @@ def _parse_report(payload: Any, location: str) -> ReportSpec:
         required_fields=_string_list(
             payload.get("required_fields", []), f"{location}.required_fields"
         ),
-        counts=_thresholds(payload.get("counts", {}) or {}, f"{location}.counts"),
-        metrics=_thresholds(payload.get("metrics", {}) or {}, f"{location}.metrics"),
-        numeric=_thresholds(payload.get("numeric", {}) or {}, f"{location}.numeric"),
+        counts=_thresholds(payload.get("counts", {}), f"{location}.counts"),
+        metrics=_thresholds(payload.get("metrics", {}), f"{location}.metrics"),
+        numeric=_thresholds(payload.get("numeric", {}), f"{location}.numeric"),
         outputs=outputs,
     )
 
@@ -85,6 +128,7 @@ def _parse_report(payload: Any, location: str) -> ReportSpec:
 def _parse_output(payload: Any, location: str) -> OutputSpec:
     if not isinstance(payload, dict):
         raise SpecValidationError(f"{location} must be a mapping")
+    _reject_unknown(payload, {"path_field", "required", "columns", "csv_columns"}, location)
     if "columns" in payload and "csv_columns" in payload:
         raise SpecValidationError(f"{location} must use only one of columns or csv_columns")
     column_key = "csv_columns" if "csv_columns" in payload else "columns"
@@ -93,6 +137,13 @@ def _parse_output(payload: Any, location: str) -> OutputSpec:
         required=_optional_bool(payload, "required", True, f"{location}.required"),
         csv_columns=_string_list(payload.get(column_key, []), f"{location}.{column_key}"),
     )
+
+
+def _reject_unknown(payload: dict, allowed: set[str], location: str) -> None:
+    unknown = set(payload) - allowed
+    if unknown:
+        fields = ", ".join(sorted(map(str, unknown)))
+        raise SpecValidationError(f"{location} contains unsupported fields: {fields}")
 
 
 def _required_str(payload: dict[str, Any], key: str, location: str) -> str:
@@ -150,9 +201,18 @@ def _thresholds(payload: Any, location: str) -> dict[str, dict[str, float]]:
             if (
                 not isinstance(value, int | float)
                 or isinstance(value, bool)
-                or not math.isfinite(value)
+                or not _is_finite(value)
             ):
                 raise SpecValidationError(f"{threshold_location}.{key} must be finite numeric")
             parsed[str(key)] = float(value)
         thresholds[str(name)] = parsed
+        if "min" in parsed and "max" in parsed and parsed["min"] > parsed["max"]:
+            raise SpecValidationError(f"{threshold_location}.min must not exceed max")
     return thresholds
+
+
+def _is_finite(value: int | float) -> bool:
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False

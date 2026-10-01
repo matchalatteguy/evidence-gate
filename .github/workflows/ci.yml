@@ -1,0 +1,37 @@
+name: checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --locked --dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -W error::DeprecationWarning
+      - run: uv run python examples/missing_export.py
+      - run: uv build
+      - name: Verify installed wheel outside the checkout
+        shell: bash
+        run: |
+          uv venv "$RUNNER_TEMP/wheel-env"
+          uv pip install --python "$RUNNER_TEMP/wheel-env/bin/python" dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/wheel-env/bin/evidence-gate" init-example wheel-example
+          "$RUNNER_TEMP/wheel-env/bin/evidence-gate" validate --spec wheel-example/evidence-gate.yaml --run wheel-example/runs/demo-run --json-out status.json
+          "$RUNNER_TEMP/wheel-env/bin/evidence-gate" packet --status status.json --md-out review-packet.md

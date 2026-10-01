@@ -51,6 +51,8 @@ The initial schema is deliberately small. If your pipeline has many stages, mode
 
 Report files must contain JSON objects. Arrays, strings, and malformed JSON fail with `report.invalid_json`.
 
+The report list must be non-empty and report names must be unique. Unknown or duplicate contract fields are errors rather than silently ignored checks. Optional maps must be mappings when supplied; `[]` and `null` are not empty maps. A threshold's `min` cannot exceed its `max`. Duplicate JSON report fields also fail validation.
+
 ## Dot paths
 
 `required_fields` and output `path_field` values use simple dot paths through JSON objects:
@@ -109,6 +111,8 @@ outputs:
 The referenced report value must be a relative path string under the run root. Required missing artifacts fail; optional missing artifacts warn. Each output spec must be a mapping with a `path_field`; malformed output specs raise a clear `ValueError` during spec loading. When `csv_columns` is set, Evidence Gate reads only the CSV header and checks that every listed column is present. Missing columns fail with `table.column_missing`; unreadable or non-UTF-8 CSV files fail with `table.invalid_csv` instead of crashing validation. The old `columns` spelling is accepted as a backward-compatible alias, but new contracts should use `csv_columns` so the CSV-specific behavior is explicit.
 
 ## Path policy
+
+Paths must be non-empty strings. Output artifacts must be files; a directory fails with `artifact.not_file` even when no CSV columns are requested. Unreadable or non-UTF-8 reports fail with `report.invalid_json`.
 
 All report and output paths must be relative and contained by the run directory. These are rejected:
 

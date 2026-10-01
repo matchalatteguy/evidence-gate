@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import csv
-import json
 import math
 from pathlib import Path
 from typing import Any
 
+from evidence_gate.json_data import parse_json
 from evidence_gate.models import (
     Check,
     EvidenceSpec,
@@ -18,6 +18,8 @@ from evidence_gate.models import (
 
 def validate_run(bundle: RunBundle, spec: EvidenceSpec) -> ValidationResult:
     checks: list[Check] = []
+    if not spec.reports:
+        checks.append(_failure("spec.empty", "Contract contains no reports", None, None))
     for report in spec.reports:
         checks.extend(_validate_report(bundle, report))
     failed = sum(1 for check in checks if check.severity == "failure")
@@ -77,8 +79,8 @@ def _validate_report(bundle: RunBundle, report: ReportSpec) -> list[Check]:
 
 def _load_json_object(path: Path) -> dict[str, Any] | None:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+        payload = parse_json(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
         return None
     return payload if isinstance(payload, dict) else None
 
@@ -128,6 +130,8 @@ def _validate_thresholds(
 ) -> list[Check]:
     checks: list[Check] = []
     specs = getattr(report, group)
+    if not specs:
+        return []
     values = payload.get(group, {})
     if not isinstance(values, dict):
         return [
@@ -182,7 +186,7 @@ def _validate_numeric_value(
                 display_path,
             )
         ]
-    if not isinstance(value, int | float) or isinstance(value, bool) or not math.isfinite(value):
+    if not isinstance(value, int | float) or isinstance(value, bool) or not _is_finite(value):
         return [
             _failure(
                 f"{code_prefix}.invalid",
@@ -269,6 +273,15 @@ def _validate_output(
                 bundle.display_path(path),
             )
         ]
+    if not path.is_file():
+        return [
+            _failure(
+                "artifact.not_file",
+                f"Output {output_name!r} must be a file",
+                report.name,
+                bundle.display_path(path),
+            )
+        ]
     checks = [
         Check(
             "artifact.present",
@@ -314,6 +327,13 @@ def _validate_csv_columns(
 
 
 _MISSING = object()
+
+
+def _is_finite(value: int | float) -> bool:
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def _get_path(payload: dict[str, Any], dotted_path: str) -> Any:

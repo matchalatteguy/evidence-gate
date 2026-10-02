@@ -234,7 +234,12 @@ def test_invalid_reference_file_type_fails_closed(tmp_path, kind):
         reference.symlink_to(reference.name)
     check = validate_baseline(bundle, baseline, _spec(), _payload(0.1), "metrics.json")[0]
     assert check.severity == "failure"
-    assert check.code in {"baseline.invalid_json", "baseline.path_escape"}
+    # Non-strict Path.resolve and Path.exists classify ELOOP differently across
+    # supported Python versions. An unresolved reference must always fail closed.
+    expected = {"baseline.invalid_json"}
+    if kind == "symlink-loop":
+        expected |= {"baseline.path_escape", "baseline.report_missing"}
+    assert check.code in expected
     assert str(reference) not in json.dumps(check.to_dict())
 
 

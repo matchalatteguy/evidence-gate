@@ -15,15 +15,19 @@ class Check:
     severity: Severity
     report: str | None = None
     path: str | None = None
+    details: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "code": self.code,
             "message": self.message,
             "severity": self.severity,
             "report": self.report,
             "path": self.path,
         }
+        if self.details is not None:
+            payload["details"] = self.details
+        return payload
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> Check:
@@ -36,13 +40,37 @@ class Check:
         for key in ("report", "path"):
             if payload.get(key) is not None and not isinstance(payload[key], str):
                 raise ValueError(f"check {key} must be a string or null")
+        if payload.get("details") is not None and not isinstance(payload["details"], dict):
+            raise ValueError("check details must be an object or null")
         return cls(
             code=payload["code"],
             message=payload["message"],
             severity=payload["severity"],
             report=payload.get("report"),
             path=payload.get("path"),
+            details=payload.get("details"),
         )
+
+
+@dataclass(frozen=True)
+class CsvColumnSpec:
+    type: str = "string"
+    non_empty: bool = True
+    min: int | float | None = None
+    max: int | float | None = None
+
+
+@dataclass(frozen=True)
+class CsvSpec:
+    rows: dict[str, int] = field(default_factory=dict)
+    row_count_field: str | None = None
+    columns: dict[str, CsvColumnSpec] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RegressionSpec:
+    max_increase: int | float | None = None
+    max_decrease: int | float | None = None
 
 
 @dataclass(frozen=True)
@@ -51,6 +79,7 @@ class OutputSpec:
     required: bool = True
     csv_columns: list[str] = field(default_factory=list)
     sha256_field: str | None = None
+    csv: CsvSpec | None = None
 
     @property
     def columns(self) -> list[str]:
@@ -70,6 +99,8 @@ class ReportSpec:
     metrics: dict[str, dict[str, float]] = field(default_factory=dict)
     numeric: dict[str, dict[str, float]] = field(default_factory=dict)
     outputs: dict[str, OutputSpec] = field(default_factory=dict)
+    regressions: dict[str, RegressionSpec] = field(default_factory=dict)
+    baseline_match_fields: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -83,7 +114,11 @@ class RunBundle:
     root: Path
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "root", self.root.resolve())
+        try:
+            resolved = self.root.resolve()
+        except (OSError, RuntimeError) as exc:
+            raise ValueError("run root could not be resolved safely") from exc
+        object.__setattr__(self, "root", resolved)
 
     def resolve_relative(self, relative_path: str) -> Path:
         if not isinstance(relative_path, str) or not relative_path.strip():
@@ -91,7 +126,10 @@ class RunBundle:
         candidate = Path(relative_path)
         if candidate.is_absolute():
             raise ValueError("absolute paths are not allowed")
-        resolved = (self.root / candidate).resolve()
+        try:
+            resolved = (self.root / candidate).resolve()
+        except (OSError, RuntimeError) as exc:
+            raise ValueError("path could not be resolved safely") from exc
         try:
             resolved.relative_to(self.root)
         except ValueError as exc:

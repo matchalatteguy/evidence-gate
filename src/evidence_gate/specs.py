@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import json
 import math
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from evidence_gate.json_data import parse_json
-from evidence_gate.models import SUPPORTED_SCHEMA_VERSION, EvidenceSpec, OutputSpec, ReportSpec
+from evidence_gate.models import (
+    SUPPORTED_SCHEMA_VERSION,
+    CsvColumnSpec,
+    CsvSpec,
+    EvidenceSpec,
+    OutputSpec,
+    RegressionSpec,
+    ReportSpec,
+)
 
 
 class SpecValidationError(ValueError):
@@ -27,6 +36,24 @@ class _StrictSafeLoader(yaml.SafeLoader):
                 )
             seen.add(key)
         return mapping
+
+    def construct_yaml_float(self, node):
+        value = super().construct_yaml_float(node)
+        if math.isfinite(value):
+            try:
+                exact = Decimal(node.value.replace("_", ""))
+            except InvalidOperation as exc:
+                raise yaml.constructor.ConstructorError(
+                    None, None, "use ordinary decimal/scientific numeric literals", node.start_mark
+                ) from exc
+            if exact != Decimal(str(value)):
+                raise yaml.constructor.ConstructorError(
+                    None, None, "numeric literal loses decimal precision", node.start_mark
+                )
+        return value
+
+
+_StrictSafeLoader.add_constructor("tag:yaml.org,2002:float", _StrictSafeLoader.construct_yaml_float)
 
 
 def load_spec(path: Path) -> EvidenceSpec:
@@ -67,6 +94,8 @@ def _load_mapping(path: Path) -> dict[str, Any]:
         raise SpecValidationError(f"invalid JSON spec: {exc}") from exc
     except yaml.YAMLError as exc:
         raise SpecValidationError(f"invalid YAML spec: {exc}") from exc
+    except RecursionError as exc:
+        raise SpecValidationError("spec nesting exceeds the supported parser depth") from exc
     if not isinstance(payload, dict):
         raise SpecValidationError("spec root must be a mapping")
     return payload
@@ -98,6 +127,8 @@ def _parse_report(payload: Any, location: str) -> ReportSpec:
             "metrics",
             "numeric",
             "outputs",
+            "regressions",
+            "baseline_match_fields",
         },
         location,
     )
@@ -110,6 +141,18 @@ def _parse_report(payload: Any, location: str) -> ReportSpec:
             raise SpecValidationError(f"{location}.outputs keys must be non-empty strings")
         output_location = f"{location}.outputs.{name}"
         outputs[str(name)] = _parse_output(config, output_location)
+    regressions = _regressions(payload.get("regressions", {}), f"{location}.regressions")
+    match_fields = _string_list(
+        payload.get("baseline_match_fields", []), f"{location}.baseline_match_fields"
+    )
+    if match_fields and not regressions:
+        raise SpecValidationError(f"{location}.baseline_match_fields requires regressions")
+    if any(
+        any(not part or part.strip() != part for part in name.split(".")) for name in match_fields
+    ):
+        raise SpecValidationError(
+            f"{location}.baseline_match_fields must contain dotted field paths"
+        )
     return ReportSpec(
         name=_required_str(payload, "name", location),
         path=_required_str(payload, "path", location),
@@ -122,6 +165,8 @@ def _parse_report(payload: Any, location: str) -> ReportSpec:
         metrics=_thresholds(payload.get("metrics", {}), f"{location}.metrics"),
         numeric=_thresholds(payload.get("numeric", {}), f"{location}.numeric"),
         outputs=outputs,
+        regressions=regressions,
+        baseline_match_fields=match_fields,
     )
 
 
@@ -129,7 +174,9 @@ def _parse_output(payload: Any, location: str) -> OutputSpec:
     if not isinstance(payload, dict):
         raise SpecValidationError(f"{location} must be a mapping")
     _reject_unknown(
-        payload, {"path_field", "required", "columns", "csv_columns", "sha256_field"}, location
+        payload,
+        {"path_field", "required", "columns", "csv_columns", "sha256_field", "csv"},
+        location,
     )
     if "columns" in payload and "csv_columns" in payload:
         raise SpecValidationError(f"{location} must use only one of columns or csv_columns")
@@ -139,7 +186,82 @@ def _parse_output(payload: Any, location: str) -> OutputSpec:
         required=_optional_bool(payload, "required", True, f"{location}.required"),
         csv_columns=_string_list(payload.get(column_key, []), f"{location}.{column_key}"),
         sha256_field=_optional_field_path(payload, "sha256_field", location),
+        csv=_parse_csv(payload["csv"], f"{location}.csv") if "csv" in payload else None,
     )
+
+
+def _parse_csv(payload: Any, location: str) -> CsvSpec:
+    if not isinstance(payload, dict):
+        raise SpecValidationError(f"{location} must be a mapping")
+    _reject_unknown(payload, {"rows", "row_count_field", "columns"}, location)
+    rows = payload.get("rows", {})
+    if not isinstance(rows, dict):
+        raise SpecValidationError(f"{location}.rows must be a mapping")
+    _reject_unknown(rows, {"min", "max"}, f"{location}.rows")
+    if "rows" in payload and not rows:
+        raise SpecValidationError(f"{location}.rows must define min, max, or both")
+    if any(type(value) is not int or value < 0 for value in rows.values()):
+        raise SpecValidationError(f"{location}.rows limits must be non-negative integers")
+    if "min" in rows and "max" in rows and rows["min"] > rows["max"]:
+        raise SpecValidationError(f"{location}.rows.min must not exceed max")
+    columns = payload.get("columns", {})
+    if not isinstance(columns, dict):
+        raise SpecValidationError(f"{location}.columns must be a mapping")
+    parsed_columns: dict[str, CsvColumnSpec] = {}
+    for name, rules in columns.items():
+        column_location = f"{location}.columns.{name}"
+        if not isinstance(name, str) or not name.strip():
+            raise SpecValidationError(f"{location}.columns keys must be non-empty strings")
+        if not isinstance(rules, dict):
+            raise SpecValidationError(f"{column_location} must be a mapping")
+        _reject_unknown(rules, {"type", "non_empty", "min", "max"}, column_location)
+        column_type = rules.get("type", "string")
+        if column_type not in ("string", "integer", "number"):
+            raise SpecValidationError(f"{column_location}.type must be string, integer, or number")
+        non_empty = _optional_bool(rules, "non_empty", True, f"{column_location}.non_empty")
+        limits = {key: rules[key] for key in ("min", "max") if key in rules}
+        if limits:
+            if column_type == "string":
+                raise SpecValidationError(
+                    f"{column_location} numeric limits require a numeric type"
+                )
+            if not non_empty:
+                raise SpecValidationError(
+                    f"{column_location} numeric limits require non_empty: true"
+                )
+            limits = _thresholds({name: limits}, f"{location}.columns")[name]
+        parsed_columns[name] = CsvColumnSpec(
+            type=column_type, non_empty=non_empty, min=limits.get("min"), max=limits.get("max")
+        )
+    return CsvSpec(
+        rows=dict(rows),
+        row_count_field=_optional_field_path(payload, "row_count_field", location),
+        columns=parsed_columns,
+    )
+
+
+def _regressions(payload: Any, location: str) -> dict[str, RegressionSpec]:
+    if not isinstance(payload, dict):
+        raise SpecValidationError(f"{location} must be a mapping")
+    parsed: dict[str, RegressionSpec] = {}
+    for name, rules in payload.items():
+        if not isinstance(name, str) or any(
+            not part or part.strip() != part for part in name.split(".")
+        ):
+            raise SpecValidationError(f"{location} keys must be non-empty dotted field paths")
+        rule_location = f"{location}.{name}"
+        if not isinstance(rules, dict):
+            raise SpecValidationError(f"{rule_location} must be a mapping")
+        _reject_unknown(rules, {"max_increase", "max_decrease"}, rule_location)
+        if not rules:
+            raise SpecValidationError(f"{rule_location} must define max_increase or max_decrease")
+        for value in rules.values():
+            if type(value) not in (int, float) or not _is_finite(value) or value < 0:
+                raise SpecValidationError(
+                    f"{rule_location} tolerances must be finite non-negative numbers"
+                )
+        parsed[name] = RegressionSpec(**rules)
+    return parsed
 
 
 def _optional_field_path(payload: dict[str, Any], key: str, location: str) -> str | None:
@@ -204,7 +326,7 @@ def _thresholds(payload: Any, location: str) -> dict[str, dict[str, float]]:
         unknown = set(rules) - {"min", "max"}
         if unknown:
             raise SpecValidationError(
-                f"{threshold_location} contains unsupported threshold keys: {', '.join(sorted(unknown))}"
+                f"{threshold_location} contains unsupported threshold keys: {', '.join(sorted(map(str, unknown)))}"
             )
         if not rules:
             raise SpecValidationError(f"{threshold_location} must define min, max, or both")
@@ -216,7 +338,7 @@ def _thresholds(payload: Any, location: str) -> dict[str, dict[str, float]]:
                 or not _is_finite(value)
             ):
                 raise SpecValidationError(f"{threshold_location}.{key} must be finite numeric")
-            parsed[str(key)] = float(value)
+            parsed[str(key)] = value
         thresholds[str(name)] = parsed
         if "min" in parsed and "max" in parsed and parsed["min"] > parsed["max"]:
             raise SpecValidationError(f"{threshold_location}.min must not exceed max")

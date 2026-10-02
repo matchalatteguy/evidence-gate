@@ -7,9 +7,11 @@ Thanks for considering a contribution.
 This project uses Python, `uv`, `pytest`, and `ruff`.
 
 ```bash
-uv sync --group dev
-uv run --group dev ruff check .
-uv run --group dev pytest
+uv sync --locked --dev
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest -W error::DeprecationWarning
+uv build
 ```
 
 ## Pull requests
@@ -25,3 +27,10 @@ Before opening a pull request, please:
 ## Project scope
 
 Keep the package generic and reusable. Avoid domain-specific private context, organization-specific assumptions, and hardcoded local paths.
+
+Evidence Gate is a declarative local gate. Keep producer computations outside the
+validator, preserve exit-code and failure-code semantics, and state what each check
+actually establishes. New artifact checks should stream when possible and retain
+bounded diagnostics. Reference comparisons must fail closed for missing context
+or unsupported values. Update the contract reference and migration notes when
+introducing new keys or numeric/path policies.

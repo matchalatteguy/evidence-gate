@@ -5,7 +5,7 @@ This page is the fastest path from a fresh checkout to a validated example run a
 ## 1. Install dependencies
 
 ```bash
-uv sync --dev
+uv sync --locked --dev
 ```
 
 If you do not have `uv`, install it from the Astral project instructions or use a Python 3.11+ virtual environment with `python -m pip install -e .`.
@@ -16,7 +16,8 @@ If you do not have `uv`, install it from the Astral project instructions or use 
 uv run evidence-gate --help
 ```
 
-You should see the three commands: `validate`, `packet`, and `init-example`.
+You should see `validate`, `check-spec`, `packet`, and `init-example`.
+`uv run evidence-gate --version` prints the installed package version.
 
 ## 3. Validate the bundled toy run
 
@@ -62,10 +63,14 @@ Try changing `scratch/my-first-run/runs/demo-run/reports/metrics.json` so `accur
 
 ## Troubleshooting
 
+For baseline/content checks, run the [model promotion example](../examples/model-promotion/README.md).
+It demonstrates three rejected runs and an approved repair, saving all report formats.
+
 - `target already exists`: `init-example` refuses to overwrite directories. Pick a new target or remove your scratch copy manually.
 - `report.missing`: check that the report path in the contract is relative to the `--run` directory.
 - `path.absolute` or `path.escape`: replace absolute paths and `..` segments with paths contained by the run directory.
 - `table.column_missing`: the referenced CSV exists, but its header is missing a required column.
+- Exit `2`: no usable new result exists; do not reuse a previous approval file. Read stderr and repair the contract, inputs, or output destinations.
 
 ## What to read next
 

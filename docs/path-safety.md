@@ -31,10 +31,25 @@ Review packets should be safe to share and easy to reproduce. Absolute paths can
 
 ## How validation reports path issues
 
-- A report or artifact path that is absolute fails with `path.absolute`.
+- An absolute artifact path fails with `path.absolute`; an absolute report path uses `path.escape`.
 - A path that escapes the run root fails with `path.escape`.
 - Missing required reports fail with `report.missing`.
 - Missing required artifacts fail with `artifact.missing`.
+
+Rejected path values are redacted as `<outside-run-root>`. Baseline report paths
+use the reference's own boundary and fail with `baseline.path_escape`.
+Reports and artifacts must be regular files; named pipes cannot wait for a writer
+inside validation. Symlink resolution errors fail safely.
+
+CLI review destinations must be outside both run roots and distinct from inputs and
+other outputs. Existing symlink/hardlink destinations are refused. This protects
+producer evidence from accidental `--json-out` overwrites. The Python producer/file
+writer helpers use caller-selected destinations and do not impose this CLI policy.
+
+Destination comparisons conservatively ignore case and canonical Unicode spelling
+on every platform. `Review.json`/`review.json` or composed/decomposed accents cannot
+be separate outputs, even on a case-sensitive filesystem. This also protects
+differently spelled aliases of run roots and input files on macOS.
 
 ## Design recommendation
 

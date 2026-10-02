@@ -4,9 +4,12 @@ import csv
 import hashlib
 import math
 import re
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from evidence_gate.baselines import validate_baseline
+from evidence_gate.csv_checks import validate_csv
 from evidence_gate.json_data import parse_json
 from evidence_gate.models import (
     Check,
@@ -18,12 +21,31 @@ from evidence_gate.models import (
 )
 
 
-def validate_run(bundle: RunBundle, spec: EvidenceSpec) -> ValidationResult:
+def validate_run(
+    bundle: RunBundle,
+    spec: EvidenceSpec,
+    *,
+    baseline: RunBundle | None = None,
+    strict_warnings: bool = False,
+) -> ValidationResult:
     checks: list[Check] = []
     if not spec.reports:
         checks.append(_failure("spec.empty", "Contract contains no reports", None, None))
     for report in spec.reports:
-        checks.extend(_validate_report(bundle, report))
+        checks.extend(_validate_report(bundle, report, baseline))
+    if strict_warnings:
+        checks = [
+            replace(check, severity="failure", message=f"{check.message} (warnings are errors)")
+            if check.severity == "warning"
+            else check
+            for check in checks
+        ]
+        failed_reports = {check.report for check in checks if check.severity == "failure"}
+        checks = [
+            check
+            for check in checks
+            if check.code != "report.valid" or check.report not in failed_reports
+        ]
     failed = sum(1 for check in checks if check.severity == "failure")
     warned = sum(1 for check in checks if check.severity == "warning")
     passed = sum(1 for check in checks if check.severity == "pass")
@@ -37,18 +59,29 @@ def validate_run(bundle: RunBundle, spec: EvidenceSpec) -> ValidationResult:
     )
 
 
-def _validate_report(bundle: RunBundle, report: ReportSpec) -> list[Check]:
+def _validate_report(
+    bundle: RunBundle, report: ReportSpec, baseline: RunBundle | None
+) -> list[Check]:
     checks: list[Check] = []
     try:
         report_path = bundle.resolve_relative(report.path)
     except ValueError as exc:
-        return [_failure("path.escape", str(exc), report.name, report.path)]
+        return [_failure("path.escape", str(exc), report.name, "<outside-run-root>")]
     display_path = bundle.display_path(report_path)
     if not report_path.exists():
         severity = "failure" if report.required else "warning"
         code = "report.missing" if report.required else "report.optional_missing"
         return [
             Check(code, f"Report {report.name!r} is missing", severity, report.name, display_path)
+        ]
+    if not report_path.is_file():
+        return [
+            _failure(
+                "report.invalid_json",
+                "Report must be a regular JSON file",
+                report.name,
+                display_path,
+            )
         ]
     payload = _load_json_object(report_path)
     if payload is None:
@@ -66,6 +99,8 @@ def _validate_report(bundle: RunBundle, report: ReportSpec) -> list[Check]:
     checks.extend(_validate_thresholds(payload, report, "metrics", display_path))
     checks.extend(_validate_numeric_paths(payload, report, display_path))
     checks.extend(_validate_outputs(bundle, payload, report, display_path))
+    if report.regressions:
+        checks.extend(validate_baseline(bundle, baseline, report, payload, display_path))
     if not any(check.severity == "failure" for check in checks):
         checks.append(
             Check(
@@ -263,7 +298,7 @@ def _validate_output(
         path = bundle.resolve_relative(value)
     except ValueError as exc:
         code = "path.absolute" if Path(value).is_absolute() else "path.escape"
-        return [_failure(code, str(exc), report.name, value)]
+        return [_failure(code, str(exc), report.name, "<outside-run-root>")]
     if not path.exists():
         severity = "failure" if output_spec.required else "warning"
         return [
@@ -293,7 +328,18 @@ def _validate_output(
             bundle.display_path(path),
         )
     ]
-    if output_spec.csv_columns:
+    if output_spec.csv is not None:
+        checks.extend(
+            validate_csv(
+                path,
+                output_spec.csv,
+                output_spec.csv_columns,
+                payload,
+                report.name,
+                bundle.display_path(path),
+            )
+        )
+    elif output_spec.csv_columns:
         checks.extend(
             _validate_csv_columns(
                 path, output_spec.csv_columns, report.name, bundle.display_path(path)
@@ -342,7 +388,7 @@ def _validate_sha256(
         return [
             _failure(
                 "artifact.sha256_read_error",
-                f"Could not hash output: {exc}",
+                f"Could not hash output ({type(exc).__name__})",
                 report_name,
                 display_path,
             )
@@ -371,7 +417,10 @@ def _validate_csv_columns(
     except (OSError, UnicodeDecodeError, csv.Error) as exc:
         return [
             _failure(
-                "table.invalid_csv", f"CSV could not be read: {exc}", report_name, display_path
+                "table.invalid_csv",
+                f"CSV could not be read ({type(exc).__name__})",
+                report_name,
+                display_path,
             )
         ]
     missing = [column for column in expected_columns if column not in header]

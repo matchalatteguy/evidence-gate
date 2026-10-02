@@ -8,11 +8,9 @@ A review packet is the human-facing summary generated from a validation result. 
 uv run evidence-gate validate \
   --spec examples/toy-ml-run/evidence-gate.yaml \
   --run examples/toy-ml-run/runs/demo-run \
-  --json-out reports/evidence-status.json
-
-uv run evidence-gate packet \
-  --status reports/evidence-status.json \
-  --md-out reports/review-packet.md
+  --json-out reports/evidence-status.json \
+  --md-out reports/review-packet.md \
+  --junit-out reports/junit.xml
 ```
 
 ## Status JSON
@@ -46,6 +44,12 @@ Important fields:
 - `counts`: aggregate check counts for dashboards and CI logs.
 - `run_root`: display name of the run directory, not an absolute path.
 - `checks`: stable-code check details for downstream automation.
+- Optional check `details`: observed/expected counts, bounded row diagnostics, or candidate/reference values, exact metric deltas and limits.
+
+`packet --status ... --md-out ...` also formats existing status files. It is a
+snapshot formatter, not a new validation; regenerate status when evidence changes.
+Always guard the validation exit code. Exit `1` provides a usable failure review;
+exit `2` invalidates outputs for that invocation, including any earlier files.
 
 ## Markdown packet contents
 
@@ -76,4 +80,11 @@ A packet with `needs_work` means at least one required check failed. Common fixe
 
 ## Public-safe output
 
-Generated packet paths are relative to the run root. Evidence Gate intentionally avoids embedding absolute local paths in review artifacts.
+Evidence paths are relative to their run root; rejected paths are redacted.
+Markdown escapes producer-controlled text/HTML and bounds displayed details.
+The gate does not redact secrets deliberately written into valid report messages
+or chosen directory/report names; keep producer metadata appropriate for review.
+
+JUnit represents every check as a testcase with a stable ordinal name and an exact
+`code` property. This preserves separate checks sharing a code/report. Warnings
+become skipped cases; failures contain the check message and structured details.

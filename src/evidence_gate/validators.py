@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -297,7 +299,66 @@ def _validate_output(
                 path, output_spec.csv_columns, report.name, bundle.display_path(path)
             )
         )
+    if output_spec.sha256_field is not None:
+        checks.extend(
+            _validate_sha256(
+                path,
+                _get_path(payload, output_spec.sha256_field),
+                output_spec.sha256_field,
+                report.name,
+                bundle.display_path(path),
+            )
+        )
     return checks
+
+
+def _validate_sha256(
+    path: Path, expected: Any, field: str, report_name: str, display_path: str
+) -> list[Check]:
+    if expected is _MISSING:
+        return [
+            _failure(
+                "artifact.sha256_missing",
+                f"Expected SHA-256 field {field!r} is missing",
+                report_name,
+                display_path,
+            )
+        ]
+    if not isinstance(expected, str) or re.fullmatch(r"[0-9a-fA-F]{64}", expected) is None:
+        return [
+            _failure(
+                "artifact.sha256_invalid",
+                f"Expected SHA-256 field {field!r} must contain exactly 64 hexadecimal characters",
+                report_name,
+                display_path,
+            )
+        ]
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1048576), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        return [
+            _failure(
+                "artifact.sha256_read_error",
+                f"Could not hash output: {exc}",
+                report_name,
+                display_path,
+            )
+        ]
+    if digest.hexdigest() != expected.lower():
+        return [
+            _failure(
+                "artifact.sha256_mismatch",
+                f"Output bytes do not match SHA-256 field {field!r}",
+                report_name,
+                display_path,
+            )
+        ]
+    return [
+        Check("artifact.sha256_match", "Output SHA-256 matched", "pass", report_name, display_path)
+    ]
 
 
 def _validate_csv_columns(

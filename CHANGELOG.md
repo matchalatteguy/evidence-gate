@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0 — 2026-10-02
+
+- Add a reproducible input-contract → replay-comparison → evidence-review example
+  with companion repositories pinned to immutable commits.
+- Exercise incomplete exports, duplicate input events, missing future markouts,
+  and refusal to overwrite earlier runs in a separate integration CI job.
+- Add optional output `sha256_field` checks, using chunked file hashing. Missing or
+  malformed expected digests, mismatches, and read errors fail validation.
+- Bind all four replay exports to their producer-recorded hashes, with regressions
+  for truncated CSVs and empty/tampered JSON, Markdown, and input-contract reports.
+- Keep the standalone checker's runtime dependencies unchanged.
+
+Compatibility: contract schema remains `1`. Outputs without `sha256_field` retain
+their existing presence/header behavior. Absent optional outputs still warn; when
+present, a configured digest must validate. An explicitly configured field must
+be a non-empty dotted path, and its report value must be 64 hexadecimal characters.
+Older package versions reject the new contract key; use 0.3+ for digest contracts.
+Matching bytes trust the producer's report and do not authenticate source data or
+validate artifact content/schema. CSV checks continue to inspect headers, not rows.
+
 ## 0.2.0
 
 ### Contract and status validation

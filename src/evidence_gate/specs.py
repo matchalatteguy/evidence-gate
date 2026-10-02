@@ -128,7 +128,9 @@ def _parse_report(payload: Any, location: str) -> ReportSpec:
 def _parse_output(payload: Any, location: str) -> OutputSpec:
     if not isinstance(payload, dict):
         raise SpecValidationError(f"{location} must be a mapping")
-    _reject_unknown(payload, {"path_field", "required", "columns", "csv_columns"}, location)
+    _reject_unknown(
+        payload, {"path_field", "required", "columns", "csv_columns", "sha256_field"}, location
+    )
     if "columns" in payload and "csv_columns" in payload:
         raise SpecValidationError(f"{location} must use only one of columns or csv_columns")
     column_key = "csv_columns" if "csv_columns" in payload else "columns"
@@ -136,7 +138,17 @@ def _parse_output(payload: Any, location: str) -> OutputSpec:
         path_field=_required_str(payload, "path_field", location),
         required=_optional_bool(payload, "required", True, f"{location}.required"),
         csv_columns=_string_list(payload.get(column_key, []), f"{location}.{column_key}"),
+        sha256_field=_optional_field_path(payload, "sha256_field", location),
     )
+
+
+def _optional_field_path(payload: dict[str, Any], key: str, location: str) -> str | None:
+    if key not in payload:
+        return None
+    value = _required_str(payload, key, location)
+    if any(not part or part.strip() != part for part in value.split(".")):
+        raise SpecValidationError(f"{location}.{key} must name non-empty dotted field components")
+    return value
 
 
 def _reject_unknown(payload: dict, allowed: set[str], location: str) -> None:

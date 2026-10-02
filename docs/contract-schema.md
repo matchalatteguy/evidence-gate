@@ -55,7 +55,7 @@ The report list must be non-empty and report names must be unique. Unknown or du
 
 ## Dot paths
 
-`required_fields` and output `path_field` values use simple dot paths through JSON objects:
+`required_fields`, output `path_field`, and output `sha256_field` values use simple dot paths through JSON objects:
 
 ```yaml
 required_fields:
@@ -109,6 +109,35 @@ outputs:
 ```
 
 The referenced report value must be a relative path string under the run root. Required missing artifacts fail; optional missing artifacts warn. Each output spec must be a mapping with a `path_field`; malformed output specs raise a clear `ValueError` during spec loading. When `csv_columns` is set, Evidence Gate reads only the CSV header and checks that every listed column is present. Missing columns fail with `table.column_missing`; unreadable or non-UTF-8 CSV files fail with `table.invalid_csv` instead of crashing validation. The old `columns` spelling is accepted as a backward-compatible alias, but new contracts should use `csv_columns` so the CSV-specific behavior is explicit.
+
+### Output byte integrity
+
+Set `sha256_field` to the dotted field containing the producer's expected file digest:
+
+```yaml
+outputs:
+  predictions:
+    path_field: outputs.predictions
+    sha256_field: sha256.predictions
+    csv_columns: [id, label, score]
+```
+
+The field name must be a non-empty string with non-empty dotted components and no surrounding component whitespace. The expected report value must contain exactly 64 hexadecimal characters; uppercase and lowercase are accepted. A producer can record the digest after completing its output:
+
+```python
+import hashlib
+
+# report already contains outputs.predictions; run_root is the run directory.
+with (run_root / report["outputs"]["predictions"]).open("rb") as source:
+    report["sha256"] = {
+        "predictions": hashlib.file_digest(source, "sha256").hexdigest()
+    }
+# Write this report after the export is closed and the digest is recorded.
+```
+
+Validation reads the artifact in 1 MiB chunks. A matching digest adds `artifact.sha256_match`. Missing fields, malformed digests, changed bytes, and read errors fail with `artifact.sha256_missing`, `artifact.sha256_invalid`, `artifact.sha256_mismatch`, and `artifact.sha256_read_error`, respectively.
+
+Without this option, existing presence/header checks are unchanged. A missing optional artifact still warns without requiring a digest; a present optional artifact must satisfy its configured digest. The hash binds bytes to a trusted producer report. It does not authenticate that report or its sources, establish semantic correctness, or validate the artifact's content/schema. Preserve exports and their producer report together, and stop writers before validating.
 
 ## Path policy
 

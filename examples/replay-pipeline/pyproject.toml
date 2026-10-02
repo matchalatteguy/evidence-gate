@@ -1,0 +1,13 @@
+[project]
+name = "replay-evidence-example"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["evidence-gate", "replay-contract-kit", "replay-realism-kit"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv.sources]
+evidence-gate = {path = "../.."}
+replay-contract-kit = {git = "https://github.com/matchalatteguy/replay-contract-kit.git", rev = "6b9d31a8140ba5992812d749fb47be1af2c26fef"}
+replay-realism-kit = {git = "https://github.com/matchalatteguy/replay-realism-kit.git", rev = "0039cbcd02c06410881948a716ae6567f7220ac7"}

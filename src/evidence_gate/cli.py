@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import tempfile
+import unicodedata
 from importlib import metadata, resources
 from importlib.resources.abc import Traversable
 from pathlib import Path
@@ -117,23 +118,27 @@ class _OutputBatch:
         return self
 
     def _preflight(self) -> None:
-        resolved = [target.resolve() for target in self.targets]
-        if len(set(resolved)) != len(resolved):
-            raise CliInputError("output paths must be distinct")
+        try:
+            resolved = [target.resolve() for target in self.targets]
+            source_paths = {_path_key(path.resolve()) for path in self.inputs}
+            roots = [_path_key(root.resolve()) for root in self.run_roots]
+        except RuntimeError as exc:
+            raise CliInputError("output/input paths could not be resolved") from exc
+        destination_keys = [_path_key(path) for path in resolved]
+        if len(set(destination_keys)) != len(destination_keys):
+            raise CliInputError("output paths must be distinct ignoring case and Unicode normalization")
         self.resolved_targets = dict(zip(self.targets, resolved, strict=True))
-        source_paths = {path.resolve() for path in self.inputs}
-        roots = [root.resolve() for root in self.run_roots]
         source_ids = set()
         for path in self.inputs:
             if path.is_file():
                 info = path.stat()
                 source_ids.add((info.st_dev, info.st_ino))
         destination_ids = set()
-        for target, canonical in zip(self.targets, resolved, strict=True):
+        for target, canonical, key in zip(self.targets, resolved, destination_keys, strict=True):
             if target.is_symlink():
                 raise CliInputError("output destinations cannot be symbolic links")
-            if canonical in source_paths or any(
-                canonical == root or canonical.is_relative_to(root) for root in roots
+            if key in source_paths or any(
+                key == root or key.startswith(root.rstrip("/") + "/") for root in roots
             ):
                 raise CliInputError(
                     "outputs cannot replace inputs or be inside candidate/baseline run roots"
@@ -176,6 +181,11 @@ class _OutputBatch:
         self._cleanup()
 
 
+def _path_key(path: Path) -> str:
+    # Conservative on every filesystem: absent names may alias on macOS/Windows.
+    return unicodedata.normalize("NFD", unicodedata.normalize("NFD", path.as_posix()).casefold())
+
+
 def _validate(args: argparse.Namespace) -> int:
     bundle = RunBundle(args.run)
     baseline = RunBundle(args.baseline) if args.baseline is not None else None
@@ -203,6 +213,8 @@ def _validate(args: argparse.Namespace) -> int:
 
 
 def _packet(args: argparse.Namespace) -> int:
+    if not args.status.is_file():
+        raise CliInputError("status input must be an existing regular file")
     with _OutputBatch([args.md_out], [args.status], []) as outputs:
         payload = parse_json(args.status.read_text(encoding="utf-8"))
         result = ValidationResult.from_dict(payload)

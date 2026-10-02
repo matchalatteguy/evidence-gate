@@ -5,6 +5,7 @@ import os
 import shutil
 import xml.etree.ElementTree as ET
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 import yaml
@@ -240,6 +241,110 @@ def test_output_parents_are_checked_before_any_result_is_written(demo_run, tmp_p
     )
     assert status.read_text() == "old approval"
     assert blocker.read_text() == "occupied"
+    assert not list(tmp_path.glob(".evidence-gate-*"))
+
+
+@pytest.mark.parametrize("names", [("Review.json", "review.json"), ("Café.json", "Cafe\u0301.json")])
+def test_absent_output_case_and_unicode_aliases_fail_before_publishing(
+    demo_run, tmp_path, capsys, names
+):
+    spec, run = demo_run
+    first, second = [tmp_path / name for name in names]
+    assert main(arguments(spec, run, "--json-out", str(first), "--md-out", str(second))) == 2
+    assert not first.exists()
+    assert not second.exists()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "distinct ignoring case and Unicode normalization" in captured.err
+    assert not list(tmp_path.glob(".evidence-gate-*"))
+
+
+@pytest.mark.parametrize("baseline", [False, True])
+@pytest.mark.parametrize("unicode_alias", [False, True])
+def test_output_run_containment_ignores_case_and_unicode_normalization(
+    demo_run, tmp_path, capsys, baseline, unicode_alias
+):
+    spec, run = demo_run
+    protected = tmp_path / ("Café" if unicode_alias else "Candidate")
+    shutil.copytree(run, protected)
+    alias = protected.with_name("Cafe\u0301" if unicode_alias else "candidate")
+    output = alias / "status.json"
+    if baseline:
+        options = ["--baseline", str(protected)]
+    else:
+        run, options = protected, []
+    assert main(arguments(spec, run, *options, "--json-out", str(output))) == 2
+    assert not output.exists()
+    assert not (protected / "status.json").exists()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "inside candidate/baseline run roots" in captured.err
+
+
+@pytest.mark.parametrize("unicode_alias", [False, True])
+def test_output_cannot_alias_contract_by_case_or_unicode(demo_run, tmp_path, unicode_alias):
+    spec, run = demo_run
+    renamed = tmp_path / ("Café.yaml" if unicode_alias else "Contract.yaml")
+    shutil.copyfile(spec, renamed)
+    output = renamed.with_name("Cafe\u0301.yaml" if unicode_alias else "contract.yaml")
+    original = renamed.read_bytes()
+    assert main(arguments(renamed, run, "--json-out", str(output))) == 2
+    assert renamed.read_bytes() == original
+
+
+@pytest.mark.parametrize("unicode_alias", [False, True])
+def test_packet_input_case_and_unicode_aliases_are_protected(
+    demo_run, tmp_path, unicode_alias
+):
+    spec, run = demo_run
+    status = tmp_path / ("Café.json" if unicode_alias else "Status.json")
+    original = json.dumps(validate_run(RunBundle(run), load_spec(spec)).to_dict()).encode()
+    status.write_bytes(original)
+    output = status.with_name("Cafe\u0301.json" if unicode_alias else "status.json")
+    assert main(["packet", "--status", str(status), "--md-out", str(output)]) == 2
+    assert status.read_bytes() == original
+
+
+def test_preflight_path_resolution_runtime_error_is_a_controlled_input_error(
+    demo_run, tmp_path, monkeypatch, capsys
+):
+    spec, run = demo_run
+    output = tmp_path / "loop.json"
+    original = Path.resolve
+
+    def unresolved(path, *args, **kwargs):
+        if path == output:
+            raise RuntimeError("Symlink loop")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", unresolved)
+    assert main(arguments(spec, run, "--json-out", str(output))) == 2
+    assert not output.exists()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "could not be resolved; no usable result produced" in captured.err
+    assert "Traceback" not in captured.err
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="named pipes require POSIX")
+def test_packet_rejects_named_pipe_without_reading_or_publishing(tmp_path, monkeypatch, capsys):
+    status = tmp_path / "status.fifo"
+    os.mkfifo(status)
+    output = tmp_path / "review.md"
+    output.write_text("previous packet")
+    original_read = Path.read_text
+
+    def unexpected_read(path, *args, **kwargs):
+        if path == status:
+            raise AssertionError("packet must not read a special file")
+        return original_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", unexpected_read)
+    assert main(["packet", "--status", str(status), "--md-out", str(output)]) == 2
+    assert output.read_bytes() == b"previous packet"
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "status input must be an existing regular file" in captured.err
     assert not list(tmp_path.glob(".evidence-gate-*"))
 
 

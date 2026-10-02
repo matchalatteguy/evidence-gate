@@ -16,17 +16,21 @@ An agent should treat the evidence contract as the source of truth:
 ## Safe command sequence
 
 ```bash
+uv run evidence-gate check-spec --spec evidence-gate.yaml
 uv run evidence-gate validate \
   --spec evidence-gate.yaml \
   --run runs/demo-run \
-  --json-out reports/evidence-status.json
-
-uv run evidence-gate packet \
-  --status reports/evidence-status.json \
+  --json-out reports/evidence-status.json \
   --md-out reports/review-packet.md
 ```
 
 If validation exits `1`, read `reports/evidence-status.json` and group fixes by check code. Typical remediation map:
+
+If it exits `2`, ignore existing output files and repair stderr's input/contract/
+destination error first. Do not treat an earlier packet as a new approval. Run
+outputs must be outside candidate/reference bundles. For regressions, preserve a
+deliberately chosen reference and pass `--baseline`; do not pick a weaker reference
+or relax tolerances merely to obtain approval.
 
 | Check code | Meaning | Agent action |
 | --- | --- | --- |
@@ -37,6 +41,10 @@ If validation exits `1`, read `reports/evidence-status.json` and group fixes by 
 | `artifact.missing` | A declared output path does not exist. | Create the artifact or fix the report path. |
 | `path.absolute` / `path.escape` | A path leaks outside the run root. | Replace it with a relative path contained by the run directory. |
 | `table.column_missing` | CSV header lacks a required column. | Fix the artifact writer or update the column contract after review. |
+| `table.row_count_mismatch` | Export count differs from the report. | Investigate the actual writer/count calculation. |
+| `table.invalid_number` | A CSV numeric cell is invalid/nonfinite. | Inspect the bounded row diagnostics. |
+| `baseline.identity_mismatch` | Reference dataset/configuration differs. | Obtain comparable evidence. |
+| `regression.increase` / `regression.decrease` | Candidate change exceeds policy. | Surface the measured delta and limit; investigate the change. |
 
 ## Public-safety reminders
 

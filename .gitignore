@@ -7,5 +7,7 @@ dist/
 build/
 *.egg-info/
 examples/replay-pipeline/.runs/
+examples/model-promotion/.runs/
+.runs/
 reports/evidence-status.json
 reports/review-packet.md

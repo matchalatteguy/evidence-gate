@@ -1,0 +1,25 @@
+schema_version: 1
+reports:
+  - name: evaluation
+    path: reports/evaluation.json
+    expected_status: passed
+    required_fields: [summary, dataset_sha256]
+    counts:
+      examples: {min: 100}
+    metrics:
+      accuracy: {min: 0.75, max: 1}
+    baseline_match_fields: [dataset_sha256]
+    regressions:
+      metrics.accuracy: {max_decrease: 0.02}
+    outputs:
+      predictions:
+        path_field: outputs.predictions
+        sha256_field: sha256.predictions
+        csv:
+          rows: {min: 100}
+          row_count_field: counts.examples
+          columns:
+            id: {type: integer, min: 0}
+            label: {type: string}
+            prediction: {type: string}
+            score: {type: number, min: 0, max: 1}

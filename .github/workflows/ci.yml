@@ -15,6 +15,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
@@ -29,6 +30,10 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pytest -W error::DeprecationWarning
       - run: uv run python examples/missing_export.py
+      - run: uv run python examples/model-promotion/run.py --output .runs/promotion --demonstrate-failure
+      - name: Publish the demonstrated decisions to the job summary
+        shell: bash
+        run: cat .runs/promotion/reviews/*/review.md >> "$GITHUB_STEP_SUMMARY"
       - run: uv build
       - name: Verify installed wheel outside the checkout
         shell: bash
@@ -37,8 +42,10 @@ jobs:
           uv pip install --python "$RUNNER_TEMP/wheel-env/bin/python" dist/*.whl
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/wheel-env/bin/evidence-gate" init-example wheel-example
-          "$RUNNER_TEMP/wheel-env/bin/evidence-gate" validate --spec wheel-example/evidence-gate.yaml --run wheel-example/runs/demo-run --json-out status.json
+          "$RUNNER_TEMP/wheel-env/bin/evidence-gate" validate --spec wheel-example/evidence-gate.yaml --run wheel-example/runs/demo-run --json-out status.json --md-out summary.md --junit-out junit.xml
           "$RUNNER_TEMP/wheel-env/bin/evidence-gate" packet --status status.json --md-out review-packet.md
+          "$RUNNER_TEMP/wheel-env/bin/evidence-gate" init-example wheel-promotion --name model-promotion
+          "$RUNNER_TEMP/wheel-env/bin/python" wheel-promotion/run.py --output promotion-results --demonstrate-failure
 
   replay-pipeline:
     runs-on: ubuntu-latest

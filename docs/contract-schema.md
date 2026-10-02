@@ -48,6 +48,8 @@ The initial schema is deliberately small. If your pipeline has many stages, mode
 | `metrics` | map of threshold specs | no | Numeric metric values to check under report field `metrics`. |
 | `numeric` | map of dot path to threshold spec | no | Finite numeric values anywhere in the report object, addressed by dot path. |
 | `outputs` | map of output specs | no | Artifacts declared by fields in the report object. |
+| `regressions` | map of dot paths to tolerance objects | no | Compare numeric values with the same report path in `--baseline`. |
+| `baseline_match_fields` | list of dot paths | no | Require identical non-null scalar context fields in candidate/reference before comparing metrics; requires `regressions`. |
 
 Report files must contain JSON objects. Arrays, strings, and malformed JSON fail with `report.invalid_json`.
 
@@ -151,6 +153,107 @@ path: ../outside/report.json
 ```
 
 This keeps generated JSON and Markdown safe to share without embedding machine-specific absolute paths.
+
+## Full CSV content checks (0.4+)
+
+Set `csv` to enable a complete streaming scan. Even `csv: {}` checks non-empty,
+unique header names and every record's width, using Python's strict CSV reader.
+Extra columns are allowed; configured columns must exist. Quoted commas/newlines
+are supported. UTF-8, comma separation, and a header are required. A blank record
+is a malformed-width record. A parser/read failure blocks approval and marks any
+partial row count incomplete. CSV's standard field-size limit applies.
+
+```yaml
+outputs:
+  predictions:
+    path_field: outputs.predictions
+    csv:
+      rows: {min: 100, max: 100000}
+      row_count_field: counts.examples
+      columns:
+        id: {type: integer, min: 0}
+        score: {type: number, min: 0, max: 1}
+        label: {type: string}
+        note: {type: string, non_empty: false}
+```
+
+| CSV field | Default | Meaning |
+| --- | --- | --- |
+| `rows` | absent | Inclusive `min`/`max` non-negative integer data-record counts. Header excluded, multiline records count once. |
+| `row_count_field` | absent | Dot path to a producer count; it must be a non-negative integer exactly equal to observed records. |
+| `columns` | `{}` | Required column names mapped to type and value rules. |
+| Column `type` | `string` | `string`, `integer`, or `number`. |
+| Column `non_empty` | `true` | Reject empty/whitespace-only cells. `false` permits blanks, which skip type validation. |
+| Column `min`/`max` | absent | Inclusive finite numeric limits; require a numeric type and `non_empty: true`. |
+
+Integer cells use signed/unsigned ASCII digits. Number cells use finite decimal or
+scientific ASCII notation, allowing surrounding whitespace for numbers. Integer
+cells have no surrounding whitespace. Underscores and Unicode digits are rejected.
+Numeric comparisons preserve integer and decimal precision.
+Configured columns are required even with `non_empty: false`; that option permits
+blank cells, not absent columns. This does not check key uniqueness or whether row
+values agree with another artifact's contents.
+
+Errors are aggregated by type with occurrence counts and at most five starting
+physical line numbers and column names. Raw cell values are excluded. Memory holds
+the current record, header/rules, and bounded diagnostic samples. An unsuccessful
+scan never receives `table.content`; independently passing row counts do not erase
+content failures. Combine content checks with `sha256_field` for both content and
+producer-reported byte integrity. The legacy `csv_columns`/`columns` output keys
+continue to check headers only when `csv` is absent.
+
+## Baseline regressions (0.4+)
+
+```yaml
+baseline_match_fields: [dataset_sha256, evaluation.config_version]
+regressions:
+  metrics.accuracy: {max_decrease: 0.02}
+  metrics.latency_ms: {max_increase: 5}
+  numeric.error_count: {max_increase: 0}
+```
+
+Pass `--baseline runs/reference` to `validate`, or `baseline=RunBundle(...)` to
+`validate_run`. Candidate and reference roots must differ. Both reports use the
+configured relative `path`; reference paths obey containment rules too. A configured
+`expected_status` applies to the reference report before comparisons.
+
+Each tolerance must contain `max_increase`, `max_decrease`, or both, with finite,
+non-negative numeric values. Limits are absolute in the metric's original units,
+inclusive at the boundary. `delta = candidate - baseline`; an increase exceeds its
+limit when `delta > max_increase`, a decrease when `-delta > max_decrease`.
+Zero and negative reference values work because there is no relative division.
+No implicit metric direction or percentage conversion is applied.
+
+Missing/nonfinite/nonnumeric values, numeric strings, and booleans fail. Exact
+decimal subtraction is isolated from the caller's Decimal context. Results include
+candidate/reference values, exact delta/limits as decimal strings, field path, and
+candidate/reference directory names in `Check.details`. Check messages explain the
+comparison in the same units.
+
+Match fields must exist as non-null finite scalars with the same JSON scalar type
+and value; for example integer `1` differs from number `1.0`. Arrays/objects are
+not identity fields. Failed identity matching prevents metric comparison. Values
+are not dumped into identity diagnostics. Omitting match fields allows comparison
+without a context identity guard: configure the dataset/configuration fields your
+pipeline needs for a meaningful comparison.
+
+The reference is trusted comparison evidence. It is not revalidated against the
+entire candidate contract, and this feature does not establish previous approval,
+source authenticity, statistical significance, or an appropriate baseline choice.
+Preserve reference files and choose them deliberately. An absent optional candidate
+report retains its warning behavior; use strict warnings if absence should block.
+
+### Numeric representation
+
+JSON report/spec decimal literals must round-trip through Python's native float
+representation without changing their stated decimal value. For example `0.1`
+and ordinary `json.dumps` float output are supported; `0.100000000000000005`,
+overflow, and underflow literals fail parsing instead of silently collapsing
+distinct metrics or identity values. YAML float limits obey the same policy and
+use ordinary decimal/scientific notation. Integer limits are preserved exactly.
+Configured numeric strings are invalid metrics; represent high-precision measures
+in integer units if they cannot use the supported decimal representation.
+Direct Python API comparisons operate on the Python values supplied by the caller.
 
 ## Recommended report design
 

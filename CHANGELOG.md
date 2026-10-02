@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.4.0 — 2026-10-02
+
+- Add opt-in streaming CSV content checks: record widths, unique/nonblank headers,
+  typed finite cells, exact ranges, row limits, and equality to producer counts.
+- Add explicit baseline metric regressions with absolute directional tolerances,
+  context identity matching, exact decimal deltas, and self-comparison rejection.
+- Produce JSON, Markdown, and JUnit in one validation command. Add strict-warning
+  policy, contract preflight, metadata version, and named packaged examples.
+- Add bounded digest and atomic finite-JSON producer helpers.
+- Demonstrate actual classifier evaluation, regression, freshly hashed truncated/
+  invalid exports, and successful promotion; test the installed wheel outside Git.
+- Protect CLI inputs/run evidence from output aliases, escape Markdown/XML,
+  preserve distinct JUnit checks, and reject named-pipe JSON reports before reading.
+- Preserve integer thresholds; reject decimal literals that would silently lose
+  their stated precision during JSON/YAML decoding.
+
+Migration: schema remains `1`; old unconfigured contracts and header-only
+`csv_columns` retain their behavior. New `csv`, `regressions`, and
+`baseline_match_fields` keys require 0.4+. Check `details` is optional and additive.
+CLI review outputs must now be distinct, outside candidate/reference roots, and
+not symlink/hardlink destinations. Missing run directories are input errors (exit
+`2`). Never consume approval files after exit `2`: input errors preserve old files,
+and a late multi-file publication error can leave a partial batch. Each individual
+output is atomic; there is no multi-file transaction. Report/spec decimal literals
+that cannot round-trip without stated precision loss are rejected; use ordinary
+serialized floats or integer units. YAML sexagesimal float notation is unsupported.
+Destination/input/root comparisons conservatively ignore case and canonical
+Unicode spelling, including on case-sensitive filesystems.
+
+Reference metrics/hashes/context still trust the producer. Passing configured CSV
+rules does not establish dataset authenticity, metric truth, key uniqueness,
+statistical validity, or a suitable baseline. See the contract and CI guides.
+
 ## 0.3.0 — 2026-10-02
 
 - Add a reproducible input-contract → replay-comparison → evidence-review example

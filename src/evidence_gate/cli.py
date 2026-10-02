@@ -126,7 +126,9 @@ class _OutputBatch:
             raise CliInputError("output/input paths could not be resolved") from exc
         destination_keys = [_path_key(path) for path in resolved]
         if len(set(destination_keys)) != len(destination_keys):
-            raise CliInputError("output paths must be distinct ignoring case and Unicode normalization")
+            raise CliInputError(
+                "output paths must be distinct ignoring case and Unicode normalization"
+            )
         self.resolved_targets = dict(zip(self.targets, resolved, strict=True))
         source_ids = set()
         for path in self.inputs:

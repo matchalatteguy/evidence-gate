@@ -244,7 +244,9 @@ def test_output_parents_are_checked_before_any_result_is_written(demo_run, tmp_p
     assert not list(tmp_path.glob(".evidence-gate-*"))
 
 
-@pytest.mark.parametrize("names", [("Review.json", "review.json"), ("Café.json", "Cafe\u0301.json")])
+@pytest.mark.parametrize(
+    "names", [("Review.json", "review.json"), ("Café.json", "Cafe\u0301.json")]
+)
 def test_absent_output_case_and_unicode_aliases_fail_before_publishing(
     demo_run, tmp_path, capsys, names
 ):
@@ -293,9 +295,7 @@ def test_output_cannot_alias_contract_by_case_or_unicode(demo_run, tmp_path, uni
 
 
 @pytest.mark.parametrize("unicode_alias", [False, True])
-def test_packet_input_case_and_unicode_aliases_are_protected(
-    demo_run, tmp_path, unicode_alias
-):
+def test_packet_input_case_and_unicode_aliases_are_protected(demo_run, tmp_path, unicode_alias):
     spec, run = demo_run
     status = tmp_path / ("Café.json" if unicode_alias else "Status.json")
     original = json.dumps(validate_run(RunBundle(run), load_spec(spec)).to_dict()).encode()

@@ -4,7 +4,9 @@ Evidence Gate is intentionally small. It validates local evidence files and emit
 
 ## Not an experiment tracker
 
-Evidence Gate does not store run history, compare experiments over time, render dashboards, or manage metadata databases. Use it as a gate at the edge of a run, not as the system of record for all experiments.
+Evidence Gate compares explicitly selected candidate/reference values from local
+reports. It does not store run history, select baselines, render dashboards, or manage
+metadata databases. Your project owns reference selection and preservation.
 
 ## Not a hosted service
 
@@ -12,7 +14,9 @@ There is no server, queue, worker, web UI, account system, or API service. The C
 
 ## Not an artifact store or data lake
 
-Evidence Gate checks whether declared artifacts exist and whether lightweight CSV headers contain expected columns. It does not upload, copy, version, deduplicate, or warehouse large artifacts.
+Evidence Gate checks declared files, optional fingerprints, and configured CSV
+content/counts/types/ranges. It does not upload, copy, version, deduplicate, or
+warehouse artifacts, or validate arbitrary JSON Schemas or CSV key uniqueness.
 
 ## Not a scheduler
 

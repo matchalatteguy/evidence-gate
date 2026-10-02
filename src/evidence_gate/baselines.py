@@ -40,7 +40,7 @@ def validate_baseline(
                 display_path,
             )
         ]
-    if bundle.root == baseline.root:
+    if _same_run(bundle, baseline):
         return [
             _failure(
                 "baseline.same_run",
@@ -143,6 +143,19 @@ def validate_baseline(
             )
         )
     return checks
+
+
+def _same_run(candidate: RunBundle, baseline: RunBundle) -> bool:
+    if candidate.root == baseline.root:
+        return True
+    try:
+        # Case/Unicode aliases can retain different spellings after resolve on
+        # some filesystems while identifying the same directory inode.
+        return candidate.root.samefile(baseline.root)
+    except OSError:
+        # Missing/unreadable reference evidence still fails in the regular-file
+        # checks below; do not turn a failed identity probe into a comparison pass.
+        return False
 
 
 def _validate_identity(

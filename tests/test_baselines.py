@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import unicodedata
 from decimal import Decimal, localcontext
 from pathlib import Path
 
@@ -62,6 +63,26 @@ def test_candidate_cannot_be_its_own_reference(tmp_path, alias):
     assert [check.code for check in checks] == ["baseline.same_run"]
     assert checks[0].severity == "failure"
     assert str(baseline.root) not in json.dumps(checks[0].to_dict())
+
+
+@pytest.mark.parametrize("alias", ["case", "unicode"])
+def test_filesystem_spelling_alias_cannot_compare_run_with_itself(tmp_path, alias):
+    _, baseline, _ = _runs(tmp_path, _payload(0.1))
+    if alias == "case":
+        alias_root = baseline.root.with_name(baseline.root.name.upper())
+    else:
+        canonical_root = baseline.root.with_name("r\u00e9f\u00e9rence")
+        baseline.root.rename(canonical_root)
+        baseline = RunBundle(canonical_root)
+        alias_root = canonical_root.with_name(unicodedata.normalize("NFD", canonical_root.name))
+    if not alias_root.exists() or not alias_root.samefile(baseline.root):
+        pytest.skip("Filesystem does not identify this spelling as the same directory")
+    check = validate_baseline(
+        RunBundle(alias_root), baseline, _spec(), _payload(0.1), "metrics.json"
+    )[0]
+    assert check.code == "baseline.same_run"
+    assert check.severity == "failure"
+    assert str(baseline.root) not in json.dumps(check.to_dict())
 
 
 @pytest.mark.parametrize(

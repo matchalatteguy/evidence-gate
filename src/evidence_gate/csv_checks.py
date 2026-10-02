@@ -12,13 +12,14 @@ from typing import Any
 from evidence_gate.models import Check, CsvColumnSpec, CsvSpec
 
 _INTEGER = re.compile(r"[+-]?[0-9]+")
+_NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 _SAMPLE_LIMIT = 5
 _MISSING = object()
 _MESSAGES = {
     "table.row_width": "CSV records do not match the header width",
     "table.empty_cell": "Required CSV cells are empty",
     "table.invalid_integer": "CSV integer cells must contain signed or unsigned ASCII digits",
-    "table.invalid_number": "CSV numeric cells must contain finite decimal numbers",
+    "table.invalid_number": "CSV numeric cells must contain finite ASCII decimal or scientific literals",
     "table.value_below_min": "CSV numeric cells fall below their configured minimum",
     "table.value_above_max": "CSV numeric cells exceed their configured maximum",
 }
@@ -60,7 +61,10 @@ def validate_csv(
     the header at line 1. Row counts count data records, including malformed-width
     records, rather than physical lines in quoted multiline cells. A parser/read
     failure makes the count incomplete, so count rules are not evaluated against
-    that partial value. Specs should come from the validated contract loader.
+    that partial value. Number cells accept signed ASCII decimal/scientific
+    literals with surrounding whitespace ignored; integer cells accept only
+    signed ASCII digits with no surrounding whitespace. Specs should come from
+    the validated contract loader.
     """
 
     checks: list[Check] = []
@@ -170,9 +174,17 @@ def _validate_cell(
         return
     if column.type == "string":
         return
-    if column.type == "integer" and _INTEGER.fullmatch(value) is None:
-        _record_issue(issues, "table.invalid_integer", row_number, name)
-        return
+    if column.type == "integer":
+        if _INTEGER.fullmatch(value) is None:
+            _record_issue(issues, "table.invalid_integer", row_number, name)
+            return
+    else:
+        # Decimal accepts underscores and Unicode digits; these are not the
+        # portable decimal/scientific CSV literals the contract promises.
+        value = value.strip()
+        if _NUMBER.fullmatch(value) is None:
+            _record_issue(issues, "table.invalid_number", row_number, name)
+            return
     try:
         number = Decimal(value)
     except (InvalidOperation, ValueError):

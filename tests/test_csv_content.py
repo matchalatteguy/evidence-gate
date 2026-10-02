@@ -139,6 +139,28 @@ def test_numeric_cells_require_finite_numbers(tmp_path: Path, value: str) -> Non
     assert set(failures) == {"table.invalid_number"}
 
 
+@pytest.mark.parametrize(
+    "value", ["1_000", "1__0", "\u0661.\u0662", "\u0661e\u0662", "1e\u0662", "0x10", "1 2"]
+)
+def test_number_cells_reject_nonportable_decimal_lexemes(tmp_path: Path, value: str) -> None:
+    failures = _failures(
+        _checks(
+            tmp_path, f"score\n{value}\n", CsvSpec(columns={"score": CsvColumnSpec(type="number")})
+        )
+    )
+    assert set(failures) == {"table.invalid_number"}
+
+
+@pytest.mark.parametrize("value", ["  +1.25e-2  ", "-.5", "1.", "+0", "-2E+03"])
+def test_number_cells_accept_ascii_decimal_scientific_and_surrounding_whitespace(
+    tmp_path: Path, value: str
+) -> None:
+    checks = _checks(
+        tmp_path, f"score\n{value}\n", CsvSpec(columns={"score": CsvColumnSpec(type="number")})
+    )
+    assert not _failures(checks)
+
+
 @pytest.mark.parametrize("value", ["1.0", "1e3", "\u0661", " 2", "2 ", "+", "--2", "word"])
 def test_integer_cells_require_ascii_integer_lexemes(tmp_path: Path, value: str) -> None:
     failures = _failures(

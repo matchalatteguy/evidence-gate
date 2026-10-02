@@ -1,0 +1,55 @@
+schema_version: replay-realism-scenarios/v1
+baseline: reference
+quote_unit: synthetic USD
+profiles:
+  - name: reference
+    assumptions:
+      latency_ms: 10
+      stale_book_ms: 250
+      tick_size: "0.01"
+      min_size: "0.0001"
+      allow_partial_fills: true
+      require_future_markout: true
+      fee_model:
+        name: fixture-fees
+        maker_bps: "1"
+        taker_bps: "5"
+        explicit_zero_fees: false
+    simulation:
+      maker_queue_ahead: "1"
+      markout_horizon_ms: 100
+      maker_lifetime_ms: 300
+  - name: congestion
+    assumptions:
+      latency_ms: 30
+      stale_book_ms: 250
+      tick_size: "0.01"
+      min_size: "0.0001"
+      allow_partial_fills: true
+      require_future_markout: true
+      fee_model:
+        name: fixture-fees
+        maker_bps: "2"
+        taker_bps: "8"
+        explicit_zero_fees: false
+    simulation:
+      maker_queue_ahead: "2"
+      markout_horizon_ms: 100
+      maker_lifetime_ms: 300
+  - name: delayed
+    assumptions:
+      latency_ms: 80
+      stale_book_ms: 250
+      tick_size: "0.01"
+      min_size: "0.0001"
+      allow_partial_fills: true
+      require_future_markout: true
+      fee_model:
+        name: fixture-fees
+        maker_bps: "2"
+        taker_bps: "8"
+        explicit_zero_fees: false
+    simulation:
+      maker_queue_ahead: "2"
+      markout_horizon_ms: 100
+      maker_lifetime_ms: 300

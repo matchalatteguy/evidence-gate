@@ -6,6 +6,7 @@ Evidence Gate exposes a small API for scripts, notebooks, and LLM agents that ne
 
 - `EvidenceSpec`: normalized contract containing report specifications and `schema_version`.
 - `ReportSpec`: expected JSON report, required fields, thresholds, and output artifacts.
+- `OutputSpec`: artifact path field, optional CSV columns, and optional producer digest field.
 - `RunBundle`: safe wrapper around a run root directory.
 - `ValidationResult`: pass/fail result, recommendation, counts, checks, warnings, and failures.
 - `Check`: one machine-readable check with a stable code and severity.
@@ -53,6 +54,8 @@ Common failure codes include:
 - `metric.invalid`, `metric.below_min`, `metric.above_max`
 - `numeric.invalid`, `numeric.below_min`, `numeric.above_max`
 - `artifact.missing`
+- `artifact.sha256_missing`, `artifact.sha256_invalid`
+- `artifact.sha256_mismatch`, `artifact.sha256_read_error`
 - `path.absolute`, `path.escape`
 - `table.column_missing`
 

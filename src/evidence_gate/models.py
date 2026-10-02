@@ -50,6 +50,7 @@ class OutputSpec:
     path_field: str
     required: bool = True
     csv_columns: list[str] = field(default_factory=list)
+    sha256_field: str | None = None
 
     @property
     def columns(self) -> list[str]:

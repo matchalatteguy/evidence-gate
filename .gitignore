@@ -6,5 +6,6 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+examples/replay-pipeline/.runs/
 reports/evidence-status.json
 reports/review-packet.md

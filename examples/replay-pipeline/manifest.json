@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "synthetic-execution-review",
+  "event_file": "events.jsonl",
+  "event_format": "jsonl",
+  "event_time_field": "observed_at",
+  "sequence_field": "sequence",
+  "entity_keys": ["instrument_id", "venue_id"]
+}
